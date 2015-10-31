@@ -85,9 +85,12 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
     	try {
     		Log.i("ciao", "onCreate"); 
 	  	  	  //a. Configure the TUN and get the interface.
+    		Log.i("VPNService IP", getLocalIpAddress());
+    		
 	  	  	  mInterface = builder.setSession("MyVPNService")
 	  	  	  	.addAddress(getLocalIpAddress(), 24)
 	  	  	  	.addDnsServer("8.8.8.8")
+	  	  	  	.addRoute("0.0.0.0", 1)
 	  	  	  	.addRoute("0.0.0.0", 0).establish();
 	  	  	  //b. Packets to be sent are queued in this input stream.
 	  	  	  FileInputStream in = new FileInputStream(
@@ -98,7 +101,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	                  //c. The UDP channel can be used to pass/get ip package to/from server
 	  	  	  DatagramChannel tunnel = DatagramChannel.open();
 	  	  	  // Connect to the server, localhost is used for demonstration only.
-	  	  	  tunnel.connect(new InetSocketAddress(getLocalIpAddress(),80));
+	  	  	  tunnel.connect(new InetSocketAddress(getLocalIpAddress(),1050));
 	  	  	  //d. Protect this socket, so package send by it will not be feedback to the vpn service.
 	  	  	  protect(tunnel.socket());
 	  	  	  
@@ -107,11 +110,16 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	  	  	
 	  	  	  //e. Use a loop to pass packets.
 	  	   while (true) {
+	  		 Log.i("VpnService", "1");
+	  		 //packet.clear();
+	  		//packet.position(0);
+	  		 //tunnel.write(packet.putChar('a'));
+	  		
                // Assume that we did not make any progress in this iteration.
                boolean idle = true;
                // Read the outgoing packet from the input stream.
                int length = in.read(packet.array());
-               Log.i("LOG", "" + length);
+               Log.i("VpnService", "Out Pck size " + length);
                if (length > 0) {
                    // Write the outgoing packet to the tunnel.
                    packet.limit(length);
@@ -125,10 +133,11 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
                        timer = 1;
                    }
                }
+               Log.i("VpnService", "2");
                // Read the incoming packet from the tunnel.
                length = tunnel.read(packet);
                if (length > 0) {
-            	   Log.i("0", "asdadas" );
+            	   Log.i("VpnService", "Reading " + length  );
                    // Ignore control messages, which start with zero.
                    if (packet.get(0) != 0) {
                        // Write the incoming packet to the output stream.
@@ -144,6 +153,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
                        timer = 0;
                    }
                }
+               Log.i("VpnService", "3");
                // If we are idle or waiting for the network, sleep for a
                // fraction of time to avoid busy looping.
                if (idle) {
@@ -154,6 +164,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
                    // We are receiving for a long time but not sending.
                    if (timer < -15000) {
                        // Send empty control messages.
+                	   packet.clear();
                        packet.put((byte) 0).limit(1);
                        for (int i = 0; i < 3; ++i) {
                            packet.position(0);
@@ -168,6 +179,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
                        throw new IllegalStateException("Timed out");
                    }
                }
+               Log.i("VpnService", "4");
            }
 	  	  	} catch (Exception e) {
 	  	  	  // Catch any exception
@@ -400,14 +412,14 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
                 for (Enumeration<InetAddress> enumIpAddr = intf
                         .getInetAddresses(); enumIpAddr.hasMoreElements();) {
                     InetAddress inetAddress = enumIpAddr.nextElement();
-                    System.out.println("ip1--:" + inetAddress);
-                    System.out.println("ip2--:" + inetAddress.getHostAddress());
+                   // System.out.println("ip1--:" + inetAddress);
+                   // System.out.println("ip2--:" + inetAddress.getHostAddress());
 
                     // for getting IPV4 format
                     if ( !inetAddress.isLoopbackAddress() && InetAddressUtils.isIPv4Address(ipv4 = inetAddress.getHostAddress())) {
 
                         String ip = inetAddress.getHostAddress().toString();
-                        System.out.println("ip---::" + ip);
+                      //  System.out.println("ip---::" + ip);
                         // return inetAddress.getHostAddress().toString();
                         return ipv4;
                     }

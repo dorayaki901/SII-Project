@@ -37,5 +37,11 @@
                 <action android:name="android.net.VpnService"/>
             </intent-filter>
         </service>
+        
+         <service android:name=".ServerLog" 
+             android:permission="android.permission.INTERNET">
+             
+        </service>
+        
     </application>
 </manifest>
