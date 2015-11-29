@@ -87,26 +87,33 @@ public class ServerLog extends Service implements Runnable {
 				Packet pktInfo = new Packet(ByteBuffer.wrap(packet.getData()));
 				message = new String(lmessage, 0, packet.getLength());
 				Log.i("ServerLog", packet.getLength() + " Server rcv: " + message);
-				Log.i("VpnService", "UDP: " + pktInfo.ip4Header.destinationAddress + "");
+				Log.i("VpnService", "UDP destination Address: " + pktInfo.ip4Header.destinationAddress + "");
 				Log.i("VpnService", pktInfo.udpHeader.destinationPort + "");
-				//TODO: La connessione viene rifiutata! Devo riscrivere sull'interfaccia out?
-				DatagramSocket socketToInternet = new DatagramSocket(pktInfo.udpHeader.destinationPort, pktInfo.ip4Header.destinationAddress);
-				socketToInternet.send(packet);
+				
+				//TODO: Verificare se effettivamente va
+				DatagramSocket ssUDP = new DatagramSocket(null);
+				 ssUDP.setReuseAddress(true);
+				 ssUDP.bind(new InetSocketAddress( pktInfo.ip4Header.destinationAddress, pktInfo.udpHeader.destinationPort));
+				 ssUDP.send(new DatagramPacket(pktInfo.backingBuffer.array(),pktInfo.backingBuffer.array().length));
 			}		
-			//TODO
+			//TODO TCP
 			/*ServerSocket TCPserverSocket = new ServerSocket(mServerPort);
 			while(true){
+				//TCPserverSocket.setReuseAddress(true);
+				//TCPserverSocket.bind(new InetSocketAddress(mServerPort));
 				Socket clientSocket = TCPserverSocket.accept();
-				InputStream in = clientSocket.getInputStream();
-				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-				
-				Packet pktInfo = new Packet(ByteBuffer.wrap(inFromClient.));
-				message = new String(lmessage, 0, packet.getLength());
-				Log.i("ServerLog", packet.getLength() + " Server rcv: " + message);
-				Log.i("VpnService", "UDP: " + pktInfo.ip4Header.destinationAddress + "");
-				Log.i("VpnService", pktInfo.udpHeader.destinationPort + "");
-				DatagramSocket socketToInternet = new DatagramSocket(pktInfo.udpHeader.destinationPort, pktInfo.ip4Header.destinationAddress);
-				socketToInternet.send(packet);
+				 BufferedReader in = new BufferedReader(
+					        new InputStreamReader(clientSocket.getInputStream()));
+				//TODO?
+				//Packet pktInfo = new Packet(ByteBuffer.wrap(in));
+				//message = new String(lmessage, 0, packet.getLength());
+				//Log.i("ServerLog", packet.getLength() + " Server rcv: " + message);
+				//Log.i("VpnService", "UDP: " + pktInfo.ip4Header.destinationAddress + "");
+				//Log.i("VpnService", pktInfo.udpHeader.destinationPort + "");
+				//ServerSocket ssTCP = new ServerSocket();
+				//ssTCP.setReuseAddress(true);
+				//ssTCP.bind(new InetSocketAddress( pktInfo.ip4Header.destinationAddress, pktInfo.udpHeader.destinationPort));
+
 			}*/
 
 		}catch (Exception e) {
