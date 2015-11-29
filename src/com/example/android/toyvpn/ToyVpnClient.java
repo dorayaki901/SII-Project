@@ -29,17 +29,16 @@ public class ToyVpnClient extends Activity implements View.OnClickListener {
     private TextView mServerAddress;
     private TextView mServerPort;
     private TextView mSharedSecret;
+    private TextView mServerButton;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.form);
 
-        mServerAddress = (TextView) findViewById(R.id.address);
-        mServerPort = (TextView) findViewById(R.id.port);
-        mSharedSecret = (TextView) findViewById(R.id.secret);
-
-        findViewById(R.id.connect).setOnClickListener(this);
+        mServerAddress = (TextView) findViewById(R.id.stopMessage);
+        mServerButton = (Button) findViewById(R.id.connect);
+        mServerButton.setOnClickListener(this);
     }
 
     @Override
@@ -56,15 +55,17 @@ public class ToyVpnClient extends Activity implements View.OnClickListener {
     protected void onActivityResult(int request, int result, Intent data) {
         if (result == RESULT_OK) {
             String prefix = getPackageName();
-            Intent intent = new Intent(this, ToyVpnService.class)
-                    .putExtra(prefix + ".ADDRESS", mServerAddress.getText().toString())
-                   .putExtra(prefix + ".PORT", mServerPort.getText().toString())
-                    .putExtra(prefix + ".SECRET", mSharedSecret.getText().toString());
+            Intent intent = new Intent(this, ToyVpnService.class);
+                   // .putExtra(prefix + ".ADDRESS", mServerAddress.getText().toString())
+                  // .putExtra(prefix + ".PORT", mServerPort.getText().toString())
+                  //  .putExtra(prefix + ".SECRET", mSharedSecret.getText().toString());
             startService(intent);
-            
-            
+                      
             Intent ServerLog = new Intent(this,ServerLog.class);
             startService(ServerLog);
+            
+            mServerAddress.setVisibility(View.VISIBLE);
+            mServerButton.setVisibility(View.GONE);
     
         }
     }
