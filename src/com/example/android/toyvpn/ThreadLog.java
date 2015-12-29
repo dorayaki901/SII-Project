@@ -28,11 +28,15 @@ public class ThreadLog implements Runnable {
 	VpnService vpn;
 	Packet pktInfo = null;
 	
-	public ThreadLog(FileOutputStream out, ByteBuffer packet, VpnService vpn) {
-		this.packetBuffer=packet;
+	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn) {
+		this.packetBuffer = ByteBuffer.allocate(length);
+				
 		this.out=out;
 		this.vpn=vpn;
 		try {
+			packetBuffer.put(packet.array(), 0, length);
+			packetBuffer.position(0);
+			Log.i("cdsf", ""+length + packetBuffer.limit() + packetBuffer.capacity());
 			pktInfo = new Packet(packetBuffer);
 		} catch (UnknownHostException e) {e.printStackTrace();}
 	}
@@ -62,9 +66,11 @@ public class ThreadLog implements Runnable {
 		DatagramSocket ssUDP = null;
 		byte[] receiveData = new byte[512];
 		try {
-			
-			Log.i("ThreadLog", "UDP:" + pktInfo.toString() + "\nCONTENT: "+(new String(pktInfo.backingBuffer.array()).substring(28, 46)));
-			
+			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
+			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
+			Log.i("ThreadLog", "UDP:2 " + "\nCONTENT2: "+ new String(payload));
+			//Log.i("ThreadLog", "UDP:" + pktInfo.toString() + "\nCONTENT: "+(new String(pktInfo.backingBuffer.array())) + " " + pktInfo.backingBuffer.toString() + " " + pktInfo.backingBuffer.capacity());
+
 			channel = DatagramChannel.open();
 			ssUDP = channel.socket();
 			
