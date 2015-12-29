@@ -275,7 +275,7 @@ public class Packet
             this.protocolNum = BitUtils.getUnsignedByte(buffer.get());
             this.protocol = TransportProtocol.numberToEnum(protocolNum);
             this.headerChecksum = BitUtils.getUnsignedShort(buffer.getShort());
-
+            
             byte[] addressBytes = new byte[4];
             buffer.get(addressBytes, 0, 4);
             this.sourceAddress = InetAddress.getByAddress(addressBytes);
