@@ -38,7 +38,6 @@ public class ThreadLog implements Runnable {
 		try {
 			packetBuffer.put(packet.array(), 0, length);
 			packetBuffer.position(0);
-			Log.i("cdsf", ""+length + packetBuffer.limit() + packetBuffer.capacity());
 			pktInfo = new Packet(packetBuffer);
 		} catch (UnknownHostException e) {e.printStackTrace();}
 	}
@@ -46,20 +45,20 @@ public class ThreadLog implements Runnable {
 	@Override
 	public void run() {
 
-		//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("151.15.155.150")){
-		//			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
-		//			TCPSocket(pktInfo);
-		//		}
+		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("54.77.3.128")){
+			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
+			TCPSocket(pktInfo);
+		}
 
 		//		if(pktInfo.isTCP()){
 		//			TCPSocket(pktInfo);
 		//			return;
 		//		}
 
-		if(pktInfo.isUDP()){
-			UDPSocket(pktInfo);
-			return;
-		}
+		//if(pktInfo.isUDP()){
+		//	UDPSocket(pktInfo);
+		//	return;
+		//}
 
 	}
 
@@ -110,9 +109,9 @@ public class ThreadLog implements Runnable {
 		sendToApp(receivePacket.getData(),true);	
 
 	}
-	
+
 	private boolean connected = true;
-	
+
 	private synchronized void TCPSocket(Packet pktInfo) {
 		Socket ssTCP = null;
 		String responce = null;
@@ -120,23 +119,27 @@ public class ThreadLog implements Runnable {
 		BufferedReader inFromServer = null;
 		Packet pktReply = null;
 		try {
-			// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN
+			//Extract payload
+			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
+			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
+
+			/// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN
 			//SYN pkt
 			if (pktInfo.tcpHeader.isSYN() && !pktInfo.tcpHeader.isACK()){
-				pktReply = SYN_ACKresponse(pktInfo);
+				Log.d("ThreadLog", "SYN pkt received");
+				pktReply = SYN_ACKresponse(pktInfo, payload);
 			}
 			//SYN-ACK pkt
-			else if (pktInfo.tcpHeader.isSYN() && pktInfo.tcpHeader.isACK()){
-				pktReply = ACKresponse(pktInfo);
-			}
+			//else if (pktInfo.tcpHeader.isSYN() && pktInfo.tcpHeader.isACK()){
+			//	pktReply = ACKresponse(pktInfo);
+			//}
 			//ACK pkt
-			else if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
-				//pktReply = SYN_ACKresponse(pktInfo);
-				connected = true;
-				//La connessione è stabilita non devo far niente! (forse :'( )
-				// E così sia per il msg di ack vero e proprio, che per gli altri messaggi con playload giusto (forse sempre)
-			}
-			
+			//else if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
+			//pktReply = SYN_ACKresponse(pktInfo);
+			//	connected = true;
+			//La connessione è stabilita non devo far niente! (forse :'( )
+			// E così sia per il msg di ack vero e proprio, che per gli altri messaggi con playload giusto (forse sempre)
+			//}
 			//Open a connection with the outside
 			ssTCP = SocketChannel.open().socket();
 			//protect the VPN
@@ -144,19 +147,19 @@ public class ThreadLog implements Runnable {
 			ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
 			//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
 			ssTCP.setReuseAddress(true);
-
 			outToServer = new DataOutputStream(ssTCP.getOutputStream());
 			inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
-			
+
 			//send request
-			if(connected){
-				outToServer.write(pktInfo.backingBuffer.array(),0,pktInfo.backingBuffer.array().length);
+			//if(connected){
+			//Se ricevo msg di SYN-ACK non devo far nulla!
+			if(!(new String(payload)).equals("") && payload != null){
+				outToServer.write(payload,0,payload.length);
+				//}
+				//receive the response
+				responce = inFromServer.readLine();
+				Log.i("ThreadLog-Responce Status", responce);
 			}
-			//receive the response
-			responce = inFromServer.readLine();
-
-			Log.i("ThreadLog-Responce Status", responce);
-
 			Thread.sleep(200);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -170,29 +173,30 @@ public class ThreadLog implements Runnable {
 		// TODO Auto-generated method stub
 		return null;
 	}
-	
+
 	/**
 	 * brief  Built a new Syn_Ack packet responding to the original syn_pkt 
 	 * @param pkt
 	 * @return
 	 */
-	private Packet SYN_ACKresponse(Packet syn_pkt) {
+	private Packet SYN_ACKresponse(Packet syn_pkt, byte[] payload) {
 		int payloadSize = syn_pkt.backingBuffer.limit() - syn_pkt.backingBuffer.position();
-		byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
-		pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-		
+
 		byte flags = syn_pkt.tcpHeader.flags;
-		
+
 		flags = setBit(1, 4, flags); // Ack bit
 		flags = setBit(1, 7, flags); // Syn bit
-		
+
 		long sequenceNum = (int) Math.random(); // Random number 
 		long ackNum = syn_pkt.tcpHeader.sequenceNumber + 1; // increment the seq. num.
-		
-		//TODO ci va il payload??? bho
-		ByteBuffer buffer = ByteBuffer.wrap(payload);
+;
+		Log.i("ThreadLog", ""+ Integer.toBinaryString(Integer.valueOf(flags)));
+		//TODO Devo aggiungere il payload in CODA! 
+		//	   NOTA: nel payload per msg di SYN ACK NON C'E NULLAA!
+		ByteBuffer buffer = syn_pkt.backingBuffer;
+		buffer.position(0);
 		syn_pkt.updateTCPBuffer(buffer, flags, sequenceNum, ackNum, payloadSize);
-		
+
 		return syn_pkt;
 	}
 
@@ -209,7 +213,7 @@ public class ThreadLog implements Runnable {
 		else
 			return( (byte) (byteToSet & ~(1 << pos+1)) );
 	}
-	
+
 	private void sendToApp(byte[] receiveData2, boolean protocol)  {
 		pktInfo.swapSourceAndDestination();
 

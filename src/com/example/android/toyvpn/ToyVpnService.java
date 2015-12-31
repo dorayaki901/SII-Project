@@ -116,7 +116,6 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				length = in.read(packet.array());      
 				if (length > 0) {
 					//packet.limit(length);
-					Log.i("cdsf", ""+length);
 					Thread logPacket= new Thread(new ThreadLog(out, packet, length, this));
 					logPacket.start();
 					
