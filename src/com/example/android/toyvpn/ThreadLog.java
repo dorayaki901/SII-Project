@@ -25,53 +25,53 @@ import android.net.VpnService;
 import android.util.Log;
 
 public class ThreadLog implements Runnable {
-	ByteBuffer packetBuffer;
 	FileOutputStream out;
 	VpnService vpn;
 	Packet pktInfo = null;
+	int lengthRequest;
 
 	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn) {
-		this.packetBuffer = ByteBuffer.allocate(length);
-
 		this.out=out;
 		this.vpn=vpn;
-		try {
-			packetBuffer.put(packet.array(), 0, length);
-			packetBuffer.position(0);
-			pktInfo = new Packet(packetBuffer);
+		this.lengthRequest=length;
+		try {	
+			pktInfo = new Packet(packet);
 		} catch (UnknownHostException e) {e.printStackTrace();}
 	}
 
 	@Override
 	public void run() {
 
-		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("54.77.3.128")){
-			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
-			TCPSocket(pktInfo);
-		}
+//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("54.77.3.128")){
+//			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
+//			TCPSocket(pktInfo);
+//		}
 
 		//		if(pktInfo.isTCP()){
 		//			TCPSocket(pktInfo);
 		//			return;
 		//		}
 
-		//if(pktInfo.isUDP()){
-		//	UDPSocket(pktInfo);
-		//	return;
-		//}
+		if(pktInfo.isUDP()){
+			UDPSocket();
+			return;
+		}
 
 	}
 
-	private void UDPSocket(Packet pktInfo) {
+	private void UDPSocket() {
 		DatagramChannel channel = null;
 		DatagramSocket ssUDP = null;
-		byte[] receiveData = new byte[512];
+		byte[] receiveData=new byte[1024];
+			
 		try {
-			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
-			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-			Log.i("ThreadLog", "UDP:2 " + "\nCONTENT2: "+ new String(payload));
-			//Log.i("ThreadLog", "UDP:" + pktInfo.toString() + "\nCONTENT: "+(new String(pktInfo.backingBuffer.array())) + " " + pktInfo.backingBuffer.toString() + " " + pktInfo.backingBuffer.capacity());
-
+			byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
+//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
+			pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
+			pktInfo.backingBuffer.get(payload, 0, lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE);
+			
+//			Log.i("ThreadLog", "UDP:"+ new String(payload)+"\nSIZE:"+payload.length);
+			
 			channel = DatagramChannel.open();
 			ssUDP = channel.socket();
 
@@ -83,31 +83,29 @@ public class ThreadLog implements Runnable {
 			ssUDP.setBroadcast(true);
 			ssUDP.bind(null);
 
-			//TODO
-			byte[] appByte=new byte[46];
-			pktInfo.backingBuffer.get(appByte, 0, 46);
-
-			DatagramPacket sendPacket = new DatagramPacket(appByte,appByte.length, pktInfo.ip4Header.destinationAddress,pktInfo.udpHeader.destinationPort);
-
+			DatagramPacket sendPacket = new DatagramPacket(payload,payload.length, pktInfo.ip4Header.destinationAddress,pktInfo.udpHeader.destinationPort);
+			
 			ssUDP.send(sendPacket);
 
 		} catch (Exception e) {e.printStackTrace();}
 
-
 		DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
 
 		try {
-			//	    	  Log.i("ThreadLog", "RECEIVING");
-
 			ssUDP.receive(receivePacket);
-		} catch (IOException e) {e.printStackTrace(); 
-		Log.i("ThreadLog", "ERROR");
+		} catch (IOException e) {
+			e.printStackTrace(); 
+			Log.i("ThreadLog", "ERROR");
 		}
 
-		Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())));
+		Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));
 
-		sendToApp(receivePacket.getData(),true);	
-
+//		ByteBuffer appSendByte=ByteBuffer.allocate(receivePacket.getLength());
+//		appSendByte.put(receivePacket.getData(), 0, receivePacket.getLength());
+		
+//		Log.i("ThreadLog", "responce:" +appSendByte.array().length+"  /   "+receivePacket.getLength());
+		
+		sendToApp(receivePacket.getData(),receivePacket.getLength(),true);	
 	}
 
 	private boolean connected = true;
@@ -214,23 +212,29 @@ public class ThreadLog implements Runnable {
 			return( (byte) (byteToSet & ~(1 << pos+1)) );
 	}
 
-	private void sendToApp(byte[] receiveData2, boolean protocol)  {
-		pktInfo.swapSourceAndDestination();
-
+	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
+		 //UDPheader+ipheader+length
+		pktInfo.updateSourceAndDestination();
 		if (protocol){
-			pktInfo.updateUDPBuffer(ByteBuffer.wrap(receiveData2),receiveData2.length);
-			Log.i("ThreadLog-SWAP","SWAP: "+pktInfo.toString());	
-		}
-
-		//		else
-		//			pktInfo.updateTCPBuffer(ByteBuffer.wrap(receiveData2), 0 , sequenceNum, ackNum, payloadSize);
+			pktInfo.updateUDPBuffer(receiveData,length);
+			
+		}//else
+			//pktInfo.updateTCPBuffer(ByteBuffer.wrap(receiveData2), , 0, 0, 0);
+		Packet prova = null;
 		try {
-			out.write(receiveData2, 0, receiveData2.length);
-
-		} catch (IOException e) {
-
-			e.printStackTrace();
+			prova = new Packet(pktInfo.backingBuffer);
+		} catch (UnknownHostException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
+		
+		Log.i("ThreadLog-", "dim. responce:" +pktInfo.ip4Header.totalLength+"\n"+prova.toString());
+		Log.i("ThreadLog-", "body:"+(new String(pktInfo.backingBuffer.array())));
+		try {
+			
+			out.write(pktInfo.backingBuffer.array(), 0, prova.ip4Header.totalLength);
+
+		} catch (IOException e) {e.printStackTrace();}
 
 	}
 

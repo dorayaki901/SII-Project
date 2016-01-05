@@ -20,6 +20,8 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 
+import android.util.Log;
+
 /**
  * Representation of an IP Packet
  */
@@ -34,6 +36,7 @@ public class Packet
     public TCPHeader tcpHeader;
     public UDPHeader udpHeader;
     public ByteBuffer backingBuffer;
+    public int position;
 
     private boolean isTCP;
     private boolean isUDP;
@@ -47,6 +50,7 @@ public class Packet
             this.udpHeader = new UDPHeader(buffer);
             this.isUDP = true;
         }
+        
         this.backingBuffer = buffer;
     }
 
@@ -91,6 +95,42 @@ public class Packet
             tcpHeader.sourcePort = newSourcePort;
         }
     }
+    
+    public byte[] array(){
+    	byte[] array;
+    	ByteBuffer buffer=ByteBuffer.allocate(ip4Header.IHL+ip4Header.totalLength);
+    	array=ip4Header.array();
+    	buffer.put(array, 0, array.length);
+    	
+    	array= (isTCP) ? tcpHeader.array() : udpHeader.array();
+    	
+    	buffer.put(array, 0, array.length);
+    	    	
+    	
+    	return array;
+    }
+    
+    public void updateSourceAndDestination()
+    {
+    	//per ora è implementato correttamente solo udp
+    	position=backingBuffer.position();
+    	backingBuffer.position(12);
+        backingBuffer.put(this.ip4Header.destinationAddress.getAddress(), 0, 4);
+        backingBuffer.put(this.ip4Header.sourceAddress.getAddress(), 0, 4);      
+        backingBuffer.position(this.ip4Header.headerLength);
+        if (isUDP)
+        {
+        	Log.i("Packet",""+BitUtils.toInt(BitUtils.toBytes(this.udpHeader.destinationPort)));
+        	backingBuffer.put(BitUtils.toBytes(this.udpHeader.destinationPort), 2, 2);
+        	backingBuffer.put(BitUtils.toBytes(this.udpHeader.sourcePort), 2, 2);
+        }
+        else if (isTCP)
+        {
+            int newSourcePort = tcpHeader.destinationPort;
+            tcpHeader.destinationPort = tcpHeader.sourcePort;
+            tcpHeader.sourcePort = newSourcePort;
+        }
+    }
 
     public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize)
     {
@@ -123,8 +163,7 @@ public class Packet
 
     public void updateUDPBuffer(ByteBuffer buffer, int payloadSize)
     {
-        buffer.position(0);
-        fillHeader(buffer);
+    	
         backingBuffer = buffer;
 
         int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
@@ -141,7 +180,32 @@ public class Packet
 
         updateIP4Checksum();
     }
+    /**
+	 * Imposta il nuovo payload nel backingBuffer, 
+	 * ritorna la dimensione del buffer 
+	 */
+    public void updateUDPBuffer(byte[] array, int payloadSize)
+    {
+        backingBuffer.position(ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
+        backingBuffer.put(array);
 
+        int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
+        backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);
+        udpHeader.length = udpTotalLength;
+
+        // Disable UDP checksum validation
+        backingBuffer.putShort(IP4_HEADER_SIZE + 6, (short) 0);
+        udpHeader.checksum = 0;
+
+        int ip4TotalLength = IP4_HEADER_SIZE + udpTotalLength;
+        backingBuffer.putShort(2, (short) ip4TotalLength);
+        ip4Header.totalLength = ip4TotalLength;
+
+        updateIP4Checksum();
+        backingBuffer.position(0);
+    }
+    
+    
     private void updateIP4Checksum()
     {
         ByteBuffer buffer = backingBuffer.duplicate();
@@ -286,7 +350,13 @@ public class Packet
             //this.optionsAndPadding = buffer.getInt();
         }
 
-        public void fillHeader(ByteBuffer buffer)
+        public byte[] array() {
+        	
+             
+			return null;
+		}
+
+		public void fillHeader(ByteBuffer buffer)
         {
             buffer.put((byte) (this.version << 4 | this.IHL));
             buffer.put((byte) this.typeOfService);
@@ -438,6 +508,13 @@ public class Packet
             return sb.toString();
         }
         
+        public byte[] array() {
+        	
+            
+			return null;
+		}
+
+        
     }
 
     public static class UDPHeader
@@ -477,23 +554,12 @@ public class Packet
             sb.append('}');
             return sb.toString();
         }
+        public byte[] array() {
+        	
+            
+			return null;
+		}
+
     }
 
-    private static class BitUtils
-    {
-        private static short getUnsignedByte(byte value)
-        {
-            return (short)(value & 0xFF);
-        }
-
-        private static int getUnsignedShort(short value)
-        {
-            return value & 0xFFFF;
-        }
-
-        private static long getUnsignedInt(int value)
-        {
-            return value & 0xFFFFFFFFL;
-        }
-    }
 }

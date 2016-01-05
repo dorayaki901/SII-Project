@@ -62,7 +62,6 @@ public class ServerLog extends Service implements Runnable {
 	@Override
 
 	public synchronized void run() {
-		Log.i("ServerLog", "Server Starting");
 		String message = "";
 		byte[] lmessage = new byte[3000];
 		DatagramPacket packet = new DatagramPacket(lmessage, lmessage.length);

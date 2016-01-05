@@ -62,7 +62,6 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// The handler is only used to show messages.
-		Log.i("ciao", "onCreate");   
 		mThread = new Thread(this, "ToyVpnThread");
 		//start the service
 		mThread.start();
@@ -103,7 +102,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					mInterface.getFileDescriptor());
 
 
-			ByteBuffer packet = ByteBuffer.allocate(32767);
+			ByteBuffer packet = ByteBuffer.allocate(1600);
 			int timer = 0;
 			int length = 0;
 			boolean idle;

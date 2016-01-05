@@ -54,15 +54,15 @@ public class ToyVpnClient extends Activity implements View.OnClickListener {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         if (result == RESULT_OK) {
-            String prefix = getPackageName();
+//            String prefix = getPackageName();
             Intent intent = new Intent(this, ToyVpnService.class);
                    // .putExtra(prefix + ".ADDRESS", mServerAddress.getText().toString())
                   // .putExtra(prefix + ".PORT", mServerPort.getText().toString())
                   //  .putExtra(prefix + ".SECRET", mSharedSecret.getText().toString());
             startService(intent);
                       
-            Intent ServerLog = new Intent(this,ServerLog.class);
-            startService(ServerLog);
+//            Intent ServerLog = new Intent(this,ServerLog.class);
+//            startService(ServerLog);
             
             mServerAddress.setVisibility(View.VISIBLE);
             mServerButton.setVisibility(View.GONE);
