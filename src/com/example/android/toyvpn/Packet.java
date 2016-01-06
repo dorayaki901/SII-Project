@@ -1,18 +1,18 @@
 /*
-** Copyright 2015, Mohamed Naufal
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+ ** Copyright 2015, Mohamed Naufal
+ **
+ ** Licensed under the Apache License, Version 2.0 (the "License");
+ ** you may not use this file except in compliance with the License.
+ ** You may obtain a copy of the License at
+ **
+ **     http://www.apache.org/licenses/LICENSE-2.0
+ **
+ ** Unless required by applicable law or agreed to in writing, software
+ ** distributed under the License is distributed on an "AS IS" BASIS,
+ ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ ** See the License for the specific language governing permissions and
+ ** limitations under the License.
+ */
 
 package com.example.android.toyvpn;
 
@@ -28,538 +28,554 @@ import android.util.Log;
 
 public class Packet
 {
-    public static final int IP4_HEADER_SIZE = 20;
-    public static final int TCP_HEADER_SIZE = 20;
-    public static final int UDP_HEADER_SIZE = 8;
+	public static final int IP4_HEADER_SIZE = 20;
+	public static final int TCP_HEADER_SIZE = 20;
+	public static final int UDP_HEADER_SIZE = 8;
 
-    public IP4Header ip4Header;
-    public TCPHeader tcpHeader;
-    public UDPHeader udpHeader;
-    public ByteBuffer backingBuffer;
-    public int position;
+	public IP4Header ip4Header;
+	public TCPHeader tcpHeader;
+	public UDPHeader udpHeader;
+	public ByteBuffer backingBuffer;
+	public int position;
 
-    private boolean isTCP;
-    private boolean isUDP;
+	private boolean isTCP;
+	private boolean isUDP;
 
-    public Packet(ByteBuffer buffer) throws UnknownHostException {
-        this.ip4Header = new IP4Header(buffer);
-        if (this.ip4Header.protocol == IP4Header.TransportProtocol.TCP) {
-            this.tcpHeader = new TCPHeader(buffer);
-            this.isTCP = true;
-        } else if (ip4Header.protocol == IP4Header.TransportProtocol.UDP) {
-            this.udpHeader = new UDPHeader(buffer);
-            this.isUDP = true;
-        }
-        
-        this.backingBuffer = buffer;
-    }
+	public Packet(ByteBuffer buffer) throws UnknownHostException {
+		this.ip4Header = new IP4Header(buffer);
+		if (this.ip4Header.protocol == IP4Header.TransportProtocol.TCP) {
+			this.tcpHeader = new TCPHeader(buffer);
+			this.isTCP = true;
+		} else if (ip4Header.protocol == IP4Header.TransportProtocol.UDP) {
+			this.udpHeader = new UDPHeader(buffer);
+			this.isUDP = true;
+		}
 
-    @Override
-    public String toString()
-    {
-        final StringBuilder sb = new StringBuilder("Packet{");
-        sb.append("ip4Header=").append(ip4Header);
-        if (isTCP) sb.append(", tcpHeader=").append(tcpHeader);
-        else if (isUDP) sb.append(", udpHeader=").append(udpHeader);
-        sb.append(", payloadSize=").append(backingBuffer.limit() - backingBuffer.position());
-        sb.append('}');
-        return sb.toString();
-    }
+		this.backingBuffer = buffer;
+	}
 
-    public boolean isTCP()
-    {
-        return isTCP;
-    }
+	@Override
+	public String toString()
+	{
+		final StringBuilder sb = new StringBuilder("Packet{");
+		sb.append("ip4Header=").append(ip4Header);
+		if (isTCP) sb.append(", tcpHeader=").append(tcpHeader);
+		else if (isUDP) sb.append(", udpHeader=").append(udpHeader);
+		sb.append(", payloadSize=").append(backingBuffer.limit() - backingBuffer.position());
+		sb.append('}');
+		return sb.toString();
+	}
 
-    public boolean isUDP()
-    {
-        return isUDP;
-    }
+	public boolean isTCP()
+	{
+		return isTCP;
+	}
 
-    public void swapSourceAndDestination()
-    {
-        InetAddress newSourceAddress = ip4Header.destinationAddress;
-        ip4Header.destinationAddress = ip4Header.sourceAddress;
-        ip4Header.sourceAddress = newSourceAddress;
+	public boolean isUDP()
+	{
+		return isUDP;
+	}
 
-        if (isUDP)
-        {
-            int newSourcePort = udpHeader.destinationPort;
-            udpHeader.destinationPort = udpHeader.sourcePort;
-            udpHeader.sourcePort = newSourcePort;
-        }
-        else if (isTCP)
-        {
-            int newSourcePort = tcpHeader.destinationPort;
-            tcpHeader.destinationPort = tcpHeader.sourcePort;
-            tcpHeader.sourcePort = newSourcePort;
-        }
-    }
-    
-    public byte[] array(){
-    	byte[] array;
-    	ByteBuffer buffer=ByteBuffer.allocate(ip4Header.IHL+ip4Header.totalLength);
-    	array=ip4Header.array();
-    	buffer.put(array, 0, array.length);
-    	
-    	array= (isTCP) ? tcpHeader.array() : udpHeader.array();
-    	
-    	buffer.put(array, 0, array.length);
-    	    	
-    	
-    	return array;
-    }
-    
-    public void updateSourceAndDestination()
-    {
-    	//per ora è implementato correttamente solo udp
-    	position=backingBuffer.position();
-    	backingBuffer.position(12);
-        backingBuffer.put(this.ip4Header.destinationAddress.getAddress(), 0, 4);
-        backingBuffer.put(this.ip4Header.sourceAddress.getAddress(), 0, 4);      
-        backingBuffer.position(this.ip4Header.headerLength);
-        if (isUDP)
-        {
-        	Log.i("Packet",""+BitUtils.toInt(BitUtils.toBytes(this.udpHeader.destinationPort)));
-        	backingBuffer.put(BitUtils.toBytes(this.udpHeader.destinationPort), 2, 2);
-        	backingBuffer.put(BitUtils.toBytes(this.udpHeader.sourcePort), 2, 2);
-        }
-        else if (isTCP)
-        {
-            int newSourcePort = tcpHeader.destinationPort;
-            tcpHeader.destinationPort = tcpHeader.sourcePort;
-            tcpHeader.sourcePort = newSourcePort;
-        }
-    }
+	public void swapSourceAndDestination()
+	{
+		InetAddress newSourceAddress = ip4Header.destinationAddress;
+		ip4Header.destinationAddress = ip4Header.sourceAddress;
+		ip4Header.sourceAddress = newSourceAddress;
 
-    public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize)
-    {
-        buffer.position(0);
-        fillHeader(buffer);
-        backingBuffer = buffer;
+		if (isUDP)
+		{
+			int newSourcePort = udpHeader.destinationPort;
+			udpHeader.destinationPort = udpHeader.sourcePort;
+			udpHeader.sourcePort = newSourcePort;
+		}
+		else if (isTCP)
+		{
+			int newSourcePort = tcpHeader.destinationPort;
+			tcpHeader.destinationPort = tcpHeader.sourcePort;
+			tcpHeader.sourcePort = newSourcePort;
+		}
+	}
 
-        tcpHeader.flags = flags;
-        backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
+	public byte[] array(){
+		byte[] array;
+		ByteBuffer buffer=ByteBuffer.allocate(ip4Header.IHL+ip4Header.totalLength);
+		array=ip4Header.array();
+		buffer.put(array, 0, array.length);
 
-        tcpHeader.sequenceNumber = sequenceNum;
-        backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) sequenceNum);
+		array= (isTCP) ? tcpHeader.array() : udpHeader.array();
 
-        tcpHeader.acknowledgementNumber = ackNum;
-        backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) ackNum);
+		buffer.put(array, 0, array.length);
 
-        // Reset header size, since we don't need options
-        byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
-        tcpHeader.dataOffsetAndReserved = dataOffset;
-        backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
 
-        updateTCPChecksum(payloadSize);
+		return array;
+	}
 
-        int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
-        backingBuffer.putShort(2, (short) ip4TotalLength);
-        ip4Header.totalLength = ip4TotalLength;
+	public void updateSourceAndDestination()
+	{
+		
+			//per ora ï¿½ implementato correttamente solo udp
+			position = backingBuffer.position();
+			backingBuffer.position(12);
+			backingBuffer.put(this.ip4Header.destinationAddress.getAddress(), 0, 4);
+			backingBuffer.put(this.ip4Header.sourceAddress.getAddress(), 0, 4);      
+			backingBuffer.position(this.ip4Header.headerLength);
+			
+			InetAddress newSourceAddress = ip4Header.destinationAddress;
+			ip4Header.destinationAddress = ip4Header.sourceAddress;
+			ip4Header.sourceAddress = newSourceAddress;
+			
+			if (isUDP)
+			{
+				Log.i("Packet",""+BitUtils.toInt(BitUtils.toBytes(this.udpHeader.destinationPort)));
+				backingBuffer.put(BitUtils.toBytes(this.udpHeader.destinationPort), 2, 2);
+				backingBuffer.put(BitUtils.toBytes(this.udpHeader.sourcePort), 2, 2);
+				
+				int newSourcePort = udpHeader.destinationPort;
+				udpHeader.destinationPort = udpHeader.sourcePort;
+				udpHeader.sourcePort = newSourcePort;
+			}
+			else if (isTCP)
+			{
+				backingBuffer.put(BitUtils.toBytes(this.tcpHeader.destinationPort), 2, 2);
+				backingBuffer.put(BitUtils.toBytes(this.tcpHeader.sourcePort), 2, 2);
+				
+				int newSourcePort = tcpHeader.destinationPort;
+				tcpHeader.destinationPort = tcpHeader.sourcePort;
+				tcpHeader.sourcePort = newSourcePort;
+			}
+		
+	}
 
-        updateIP4Checksum();
-    }
+	public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize)
+	{
+		buffer.position(0);
+		fillHeader(buffer);
+		backingBuffer = buffer;
 
-    public void updateUDPBuffer(ByteBuffer buffer, int payloadSize)
-    {
-    	
-        backingBuffer = buffer;
+		tcpHeader.flags = flags;
+		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
 
-        int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
-        backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);
-        udpHeader.length = udpTotalLength;
+		tcpHeader.sequenceNumber = sequenceNum;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) sequenceNum);
 
-        // Disable UDP checksum validation
-        backingBuffer.putShort(IP4_HEADER_SIZE + 6, (short) 0);
-        udpHeader.checksum = 0;
+		tcpHeader.acknowledgementNumber = ackNum;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) ackNum);
 
-        int ip4TotalLength = IP4_HEADER_SIZE + udpTotalLength;
-        backingBuffer.putShort(2, (short) ip4TotalLength);
-        ip4Header.totalLength = ip4TotalLength;
+		// Reset header size, since we don't need options
+		byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
+		tcpHeader.dataOffsetAndReserved = dataOffset;
+		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
 
-        updateIP4Checksum();
-    }
-    /**
-	 * Imposta il nuovo payload nel backingBuffer, 
-	 * ritorna la dimensione del buffer 
+		updateTCPChecksum(payloadSize);
+
+		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
+
+		updateIP4Checksum();
+	}
+
+	public void updateUDPBuffer(ByteBuffer buffer, int payloadSize)
+	{
+
+		backingBuffer = buffer;
+
+		int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);
+		udpHeader.length = udpTotalLength;
+
+		// Disable UDP checksum validation
+		backingBuffer.putShort(IP4_HEADER_SIZE + 6, (short) 0);
+		udpHeader.checksum = 0;
+
+		int ip4TotalLength = IP4_HEADER_SIZE + udpTotalLength;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
+
+		updateIP4Checksum();
+	}
+	/**
+	 * Imposta il nuovo payload nel backingBuffer
+	 * @param array
+	 * @param payloadSize
+	 * @return ritorna la dimensione del buffer 
 	 */
-    public void updateUDPBuffer(byte[] array, int payloadSize)
-    {
-        backingBuffer.position(ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
-        backingBuffer.put(array);
+	public void updateUDPBuffer(byte[] array, int payloadSize)
+	{
+		backingBuffer.position(ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
+		backingBuffer.put(array);
 
-        int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
-        backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);
-        udpHeader.length = udpTotalLength;
+		int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);
+		udpHeader.length = udpTotalLength;
 
-        // Disable UDP checksum validation
-        backingBuffer.putShort(IP4_HEADER_SIZE + 6, (short) 0);
-        udpHeader.checksum = 0;
+		// Disable UDP checksum validation
+		backingBuffer.putShort(IP4_HEADER_SIZE + 6, (short) 0);
+		udpHeader.checksum = 0;
 
-        int ip4TotalLength = IP4_HEADER_SIZE + udpTotalLength;
-        backingBuffer.putShort(2, (short) ip4TotalLength);
-        ip4Header.totalLength = ip4TotalLength;
+		int ip4TotalLength = IP4_HEADER_SIZE + udpTotalLength;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
 
-        updateIP4Checksum();
-        backingBuffer.position(0);
-    }
-    
-    
-    private void updateIP4Checksum()
-    {
-        ByteBuffer buffer = backingBuffer.duplicate();
-        buffer.position(0);
+		updateIP4Checksum();
+		backingBuffer.position(0);
+	}
 
-        // Clear previous checksum
-        buffer.putShort(10, (short) 0);
 
-        int ipLength = ip4Header.headerLength;
-        int sum = 0;
-        while (ipLength > 0)
-        {
-            sum += BitUtils.getUnsignedShort(buffer.getShort());
-            ipLength -= 2;
-        }
-        while (sum >> 16 > 0)
-            sum = (sum & 0xFFFF) + (sum >> 16);
+	private void updateIP4Checksum()
+	{
+		ByteBuffer buffer = backingBuffer.duplicate();
+		buffer.position(0);
 
-        sum = ~sum;
-        ip4Header.headerChecksum = sum;
-        backingBuffer.putShort(10, (short) sum);
-    }
+		// Clear previous checksum
+		buffer.putShort(10, (short) 0);
 
-    private void updateTCPChecksum(int payloadSize)
-    {
-        int sum = 0;
-        int tcpLength = TCP_HEADER_SIZE + payloadSize;
+		int ipLength = ip4Header.headerLength;
+		int sum = 0;
+		while (ipLength > 0)
+		{
+			sum += BitUtils.getUnsignedShort(buffer.getShort());
+			ipLength -= 2;
+		}
+		while (sum >> 16 > 0)
+			sum = (sum & 0xFFFF) + (sum >> 16);
 
-        // Calculate pseudo-header checksum
-        ByteBuffer buffer = ByteBuffer.wrap(ip4Header.sourceAddress.getAddress());
-        sum = BitUtils.getUnsignedShort(buffer.getShort()) + BitUtils.getUnsignedShort(buffer.getShort());
+		sum = ~sum;
+		ip4Header.headerChecksum = sum;
+		backingBuffer.putShort(10, (short) sum);
+	}
 
-        buffer = ByteBuffer.wrap(ip4Header.destinationAddress.getAddress());
-        sum += BitUtils.getUnsignedShort(buffer.getShort()) + BitUtils.getUnsignedShort(buffer.getShort());
+	private void updateTCPChecksum(int payloadSize)
+	{
+		int sum = 0;
+		int tcpLength = TCP_HEADER_SIZE + payloadSize;
 
-        sum += IP4Header.TransportProtocol.TCP.getNumber() + tcpLength;
+		// Calculate pseudo-header checksum
+		ByteBuffer buffer = ByteBuffer.wrap(ip4Header.sourceAddress.getAddress());
+		sum = BitUtils.getUnsignedShort(buffer.getShort()) + BitUtils.getUnsignedShort(buffer.getShort());
 
-        buffer = backingBuffer.duplicate();
-        // Clear previous checksum
-        buffer.putShort(IP4_HEADER_SIZE + 16, (short) 0);
+		buffer = ByteBuffer.wrap(ip4Header.destinationAddress.getAddress());
+		sum += BitUtils.getUnsignedShort(buffer.getShort()) + BitUtils.getUnsignedShort(buffer.getShort());
 
-        // Calculate TCP segment checksum
-        buffer.position(IP4_HEADER_SIZE);
-        while (tcpLength > 1)
-        {
-            sum += BitUtils.getUnsignedShort(buffer.getShort());
-            tcpLength -= 2;
-        }
-        if (tcpLength > 0)
-            sum += BitUtils.getUnsignedByte(buffer.get()) << 8;
+		sum += IP4Header.TransportProtocol.TCP.getNumber() + tcpLength;
 
-        while (sum >> 16 > 0)
-            sum = (sum & 0xFFFF) + (sum >> 16);
+		buffer = backingBuffer.duplicate();
+		// Clear previous checksum
+		buffer.putShort(IP4_HEADER_SIZE + 16, (short) 0);
 
-        sum = ~sum;
-        tcpHeader.checksum = sum;
-        backingBuffer.putShort(IP4_HEADER_SIZE + 16, (short) sum);
-    }
+		// Calculate TCP segment checksum
+		buffer.position(IP4_HEADER_SIZE);
+		while (tcpLength > 1)
+		{
+			sum += BitUtils.getUnsignedShort(buffer.getShort());
+			tcpLength -= 2;
+		}
+		if (tcpLength > 0)
+			sum += BitUtils.getUnsignedByte(buffer.get()) << 8;
 
-    private void fillHeader(ByteBuffer buffer)
-    {
-        ip4Header.fillHeader(buffer);
-        if (isUDP)
-            udpHeader.fillHeader(buffer);
-        else if (isTCP)
-            tcpHeader.fillHeader(buffer);
-    }
+		while (sum >> 16 > 0)
+			sum = (sum & 0xFFFF) + (sum >> 16);
 
-    public static class IP4Header
-    {
-        public byte version;
-        public byte IHL;
-        public int headerLength;
-        public short typeOfService;
-        public int totalLength;
+		sum = ~sum;
+		tcpHeader.checksum = sum;
+		backingBuffer.putShort(IP4_HEADER_SIZE + 16, (short) sum);
+	}
 
-        public int identificationAndFlagsAndFragmentOffset;
+	private void fillHeader(ByteBuffer buffer)
+	{
+		ip4Header.fillHeader(buffer);
+		if (isUDP)
+			udpHeader.fillHeader(buffer);
+		else if (isTCP)
+			tcpHeader.fillHeader(buffer);
+	}
 
-        public short TTL;
-        private short protocolNum;
-        public TransportProtocol protocol;
-        public int headerChecksum;
+	public static class IP4Header
+	{
+		public byte version;
+		public byte IHL;
+		public int headerLength;
+		public short typeOfService;
+		public int totalLength;
 
-        public InetAddress sourceAddress;
-        public InetAddress destinationAddress;
+		public int identificationAndFlagsAndFragmentOffset;
 
-        public int optionsAndPadding;
+		public short TTL;
+		private short protocolNum;
+		public TransportProtocol protocol;
+		public int headerChecksum;
 
-        private enum TransportProtocol
-        {
-            TCP(6),
-            UDP(17),
-            Other(0xFF);
+		public InetAddress sourceAddress;
+		public InetAddress destinationAddress;
 
-            private int protocolNumber;
+		public int optionsAndPadding;
 
-            TransportProtocol(int protocolNumber)
-            {
-                this.protocolNumber = protocolNumber;
-            }
+		private enum TransportProtocol
+		{
+			TCP(6),
+			UDP(17),
+			Other(0xFF);
 
-            private static TransportProtocol numberToEnum(int protocolNumber)
-            {
-                if (protocolNumber == 6)
-                    return TCP;
-                else if (protocolNumber == 17)
-                    return UDP;
-                else
-                    return Other;
-            }
+			private int protocolNumber;
 
-            public int getNumber()
-            {
-                return this.protocolNumber;
-            }
-        }
+			TransportProtocol(int protocolNumber)
+			{
+				this.protocolNumber = protocolNumber;
+			}
 
-        private IP4Header(ByteBuffer buffer) throws UnknownHostException
-        {
-            byte versionAndIHL = buffer.get();
-            this.version = (byte) (versionAndIHL >> 4);
-            this.IHL = (byte) (versionAndIHL & 0x0F);
-            this.headerLength = this.IHL << 2;
+			private static TransportProtocol numberToEnum(int protocolNumber)
+			{
+				if (protocolNumber == 6)
+					return TCP;
+				else if (protocolNumber == 17)
+					return UDP;
+				else
+					return Other;
+			}
 
-            this.typeOfService = BitUtils.getUnsignedByte(buffer.get());
-            this.totalLength = BitUtils.getUnsignedShort(buffer.getShort());
+			public int getNumber()
+			{
+				return this.protocolNumber;
+			}
+		}
 
-            this.identificationAndFlagsAndFragmentOffset = buffer.getInt();
+		private IP4Header(ByteBuffer buffer) throws UnknownHostException
+		{	
+			byte versionAndIHL = buffer.get();
+			this.version = (byte) (versionAndIHL >> 4);
+			this.IHL = (byte) (versionAndIHL & 0x0F);
+			this.headerLength = this.IHL << 2;
+			
+			this.typeOfService = BitUtils.getUnsignedByte(buffer.get());
+			this.totalLength = BitUtils.getUnsignedShort(buffer.getShort());
+			
+			this.identificationAndFlagsAndFragmentOffset = buffer.getInt();
+			
+			this.TTL = BitUtils.getUnsignedByte(buffer.get());
+			this.protocolNum = BitUtils.getUnsignedByte(buffer.get());
+			this.protocol = TransportProtocol.numberToEnum(protocolNum);
+			this.headerChecksum = BitUtils.getUnsignedShort(buffer.getShort());
+			
+			byte[] addressBytes = new byte[4];
+			buffer.get(addressBytes, 0, 4);
+			this.sourceAddress = InetAddress.getByAddress(addressBytes);
+			
+			buffer.get(addressBytes, 0, 4);
+			this.destinationAddress = InetAddress.getByAddress(addressBytes);
+			
+			//this.optionsAndPadding = buffer.getInt();
+		}
 
-            this.TTL = BitUtils.getUnsignedByte(buffer.get());
-            this.protocolNum = BitUtils.getUnsignedByte(buffer.get());
-            this.protocol = TransportProtocol.numberToEnum(protocolNum);
-            this.headerChecksum = BitUtils.getUnsignedShort(buffer.getShort());
-            
-            byte[] addressBytes = new byte[4];
-            buffer.get(addressBytes, 0, 4);
-            this.sourceAddress = InetAddress.getByAddress(addressBytes);
+		public byte[] array() {
 
-            buffer.get(addressBytes, 0, 4);
-            this.destinationAddress = InetAddress.getByAddress(addressBytes);
 
-            //this.optionsAndPadding = buffer.getInt();
-        }
-
-        public byte[] array() {
-        	
-             
 			return null;
 		}
 
 		public void fillHeader(ByteBuffer buffer)
-        {
-            buffer.put((byte) (this.version << 4 | this.IHL));
-            buffer.put((byte) this.typeOfService);
-            buffer.putShort((short) this.totalLength);
+		{
+			buffer.put((byte) (this.version << 4 | this.IHL));
+			buffer.put((byte) this.typeOfService);
+			buffer.putShort((short) this.totalLength);
 
-            buffer.putInt(this.identificationAndFlagsAndFragmentOffset);
+			buffer.putInt(this.identificationAndFlagsAndFragmentOffset);
 
-            buffer.put((byte) this.TTL);
-            buffer.put((byte) this.protocol.getNumber());
-            buffer.putShort((short) this.headerChecksum);
+			buffer.put((byte) this.TTL);
+			buffer.put((byte) this.protocol.getNumber());
+			buffer.putShort((short) this.headerChecksum);
 
-            buffer.put(this.sourceAddress.getAddress());
-            buffer.put(this.destinationAddress.getAddress());
-        }
+			buffer.put(this.sourceAddress.getAddress());
+			buffer.put(this.destinationAddress.getAddress());
+		}
 
-        @Override
-        public String toString()
-        {
-            final StringBuilder sb = new StringBuilder("IP4Header{");
-            sb.append("version=").append(version);
-            sb.append(", IHL=").append(IHL);
-            sb.append(", typeOfService=").append(typeOfService);
-            sb.append(", totalLength=").append(totalLength);
-            sb.append(", identificationAndFlagsAndFragmentOffset=").append(identificationAndFlagsAndFragmentOffset);
-            sb.append(", TTL=").append(TTL);
-            sb.append(", protocol=").append(protocolNum).append(":").append(protocol);
-            sb.append(", headerChecksum=").append(headerChecksum);
-            sb.append(", sourceAddress=").append(sourceAddress.getHostAddress());
-            sb.append(", destinationAddress=").append(destinationAddress.getHostAddress());
-            sb.append('}');
-            return sb.toString();
-        }
-    }
+		@Override
+		public String toString()
+		{
+			final StringBuilder sb = new StringBuilder("IP4Header{");
+			sb.append("version=").append(version);
+			sb.append(", IHL=").append(IHL);
+			sb.append(", typeOfService=").append(typeOfService);
+			sb.append(", totalLength=").append(totalLength);
+			sb.append(", identificationAndFlagsAndFragmentOffset=").append(identificationAndFlagsAndFragmentOffset);
+			sb.append(", TTL=").append(TTL);
+			sb.append(", protocol=").append(protocolNum).append(":").append(protocol);
+			sb.append(", headerChecksum=").append(headerChecksum);
+			sb.append(", sourceAddress=").append(sourceAddress.getHostAddress());
+			sb.append(", destinationAddress=").append(destinationAddress.getHostAddress());
+			sb.append('}');
+			return sb.toString();
+		}
+	}
 
-    public static class TCPHeader
-    {
-        public static final int FIN = 0x01;
-        public static final int SYN = 0x02;
-        public static final int RST = 0x04;
-        public static final int PSH = 0x08;
-        public static final int ACK = 0x10;
-        public static final int URG = 0x20;
+	public static class TCPHeader
+	{
+		public static final int FIN = 0x01;
+		public static final int SYN = 0x02;
+		public static final int RST = 0x04;
+		public static final int PSH = 0x08;
+		public static final int ACK = 0x10;
+		public static final int URG = 0x20;
 
-        public int sourcePort;
-        public int destinationPort;
+		public int sourcePort;
+		public int destinationPort;
 
-        public long sequenceNumber;
-        public long acknowledgementNumber;
+		public long sequenceNumber;
+		public long acknowledgementNumber;
 
-        public byte dataOffsetAndReserved;
-        public int headerLength;
-        public byte flags;
-        public int window;
+		public byte dataOffsetAndReserved;
+		public int headerLength;
+		public byte flags;
+		public int window;
 
-        public int checksum;
-        public int urgentPointer;
+		public int checksum;
+		public int urgentPointer;
 
-        public byte[] optionsAndPadding;
+		public byte[] optionsAndPadding;
 
-        private TCPHeader(ByteBuffer buffer)
-        {
-            this.sourcePort = BitUtils.getUnsignedShort(buffer.getShort());
-            this.destinationPort = BitUtils.getUnsignedShort(buffer.getShort());
+		private TCPHeader(ByteBuffer buffer)
+		{
+			this.sourcePort = BitUtils.getUnsignedShort(buffer.getShort());
+			this.destinationPort = BitUtils.getUnsignedShort(buffer.getShort());
 
-            this.sequenceNumber = BitUtils.getUnsignedInt(buffer.getInt());
-            this.acknowledgementNumber = BitUtils.getUnsignedInt(buffer.getInt());
+			this.sequenceNumber = BitUtils.getUnsignedInt(buffer.getInt());
+			this.acknowledgementNumber = BitUtils.getUnsignedInt(buffer.getInt());
 
-            this.dataOffsetAndReserved = buffer.get();
-            this.headerLength = (this.dataOffsetAndReserved & 0xF0) >> 2;
-            this.flags = buffer.get();
-            this.window = BitUtils.getUnsignedShort(buffer.getShort());
+			this.dataOffsetAndReserved = buffer.get();
+			this.headerLength = (this.dataOffsetAndReserved & 0xF0) >> 2;
+			this.flags = buffer.get();
+			this.window = BitUtils.getUnsignedShort(buffer.getShort());
 
-            this.checksum = BitUtils.getUnsignedShort(buffer.getShort());
-            this.urgentPointer = BitUtils.getUnsignedShort(buffer.getShort());
+			this.checksum = BitUtils.getUnsignedShort(buffer.getShort());
+			this.urgentPointer = BitUtils.getUnsignedShort(buffer.getShort());
 
-            int optionsLength = this.headerLength - TCP_HEADER_SIZE;
-            if (optionsLength > 0)
-            {
-                optionsAndPadding = new byte[optionsLength];
-                buffer.get(optionsAndPadding, 0, optionsLength);
-            }
-        }
+			int optionsLength = this.headerLength - TCP_HEADER_SIZE;
+			if (optionsLength > 0)
+			{
+				optionsAndPadding = new byte[optionsLength];
+				buffer.get(optionsAndPadding, 0, optionsLength);
+			}
+		}
 
-        public boolean isFIN()
-        {
-            return (flags & FIN) == FIN;
-        }
+		public boolean isFIN()
+		{
+			return (flags & FIN) == FIN;
+		}
 
-        public boolean isSYN()
-        {
-            return (flags & SYN) == SYN;
-        }
+		public boolean isSYN()
+		{
+			return (flags & SYN) == SYN;
+		}
 
-        public boolean isRST()
-        {
-            return (flags & RST) == RST;
-        }
+		public boolean isRST()
+		{
+			return (flags & RST) == RST;
+		}
 
-        public boolean isPSH()
-        {
-            return (flags & PSH) == PSH;
-        }
+		public boolean isPSH()
+		{
+			return (flags & PSH) == PSH;
+		}
 
-        public boolean isACK()
-        {
-            return (flags & ACK) == ACK;
-        }
+		public boolean isACK()
+		{
+			return (flags & ACK) == ACK;
+		}
 
-        public boolean isURG()
-        {
-            return (flags & URG) == URG;
-        }
+		public boolean isURG()
+		{
+			return (flags & URG) == URG;
+		}
 
-        private void fillHeader(ByteBuffer buffer)
-        {
-            buffer.putShort((short) sourcePort);
-            buffer.putShort((short) destinationPort);
+		private void fillHeader(ByteBuffer buffer)
+		{
+			buffer.putShort((short) sourcePort);
+			buffer.putShort((short) destinationPort);
 
-            buffer.putInt((int) sequenceNumber);
-            buffer.putInt((int) acknowledgementNumber);
+			buffer.putInt((int) sequenceNumber);
+			buffer.putInt((int) acknowledgementNumber);
 
-            buffer.put(dataOffsetAndReserved);
-            buffer.put(flags);
-            buffer.putShort((short) window);
+			buffer.put(dataOffsetAndReserved);
+			buffer.put(flags);
+			buffer.putShort((short) window);
 
-            buffer.putShort((short) checksum);
-            buffer.putShort((short) urgentPointer);
-        }
+			buffer.putShort((short) checksum);
+			buffer.putShort((short) urgentPointer);
+		}
 
-        @Override
-        public String toString()
-        {
-            final StringBuilder sb = new StringBuilder("TCPHeader{");
-            sb.append("sourcePort=").append(sourcePort);
-            sb.append(", destinationPort=").append(destinationPort);
-            sb.append(", sequenceNumber=").append(sequenceNumber);
-            sb.append(", acknowledgementNumber=").append(acknowledgementNumber);
-            sb.append(", headerLength=").append(headerLength);
-            sb.append(", window=").append(window);
-            sb.append(", checksum=").append(checksum);
-            sb.append(", flags=");
-            if (isFIN()) sb.append(" FIN");
-            if (isSYN()) sb.append(" SYN");
-            if (isRST()) sb.append(" RST");
-            if (isPSH()) sb.append(" PSH");
-            if (isACK()) sb.append(" ACK");
-            if (isURG()) sb.append(" URG");
-            sb.append('}');
-            return sb.toString();
-        }
-        
-        public byte[] array() {
-        	
-            
+		@Override
+		public String toString()
+		{
+			final StringBuilder sb = new StringBuilder("TCPHeader{");
+			sb.append("sourcePort=").append(sourcePort);
+			sb.append(", destinationPort=").append(destinationPort);
+			sb.append(", sequenceNumber=").append(sequenceNumber);
+			sb.append(", acknowledgementNumber=").append(acknowledgementNumber);
+			sb.append(", headerLength=").append(headerLength);
+			sb.append(", window=").append(window);
+			sb.append(", checksum=").append(checksum);
+			sb.append(", flags=");
+			if (isFIN()) sb.append(" FIN");
+			if (isSYN()) sb.append(" SYN");
+			if (isRST()) sb.append(" RST");
+			if (isPSH()) sb.append(" PSH");
+			if (isACK()) sb.append(" ACK");
+			if (isURG()) sb.append(" URG");
+			sb.append('}');
+			return sb.toString();
+		}
+
+		public byte[] array() {
+
+
 			return null;
 		}
 
-        
-    }
 
-    public static class UDPHeader
-    {
-        public int sourcePort;
-        public int destinationPort;
+	}
 
-        public int length;
-        public int checksum;
+	public static class UDPHeader
+	{
+		public int sourcePort;
+		public int destinationPort;
 
-        private UDPHeader(ByteBuffer buffer)
-        {
-            this.sourcePort = BitUtils.getUnsignedShort(buffer.getShort());
-            this.destinationPort = BitUtils.getUnsignedShort(buffer.getShort());
+		public int length;
+		public int checksum;
 
-            this.length = BitUtils.getUnsignedShort(buffer.getShort());
-            this.checksum = BitUtils.getUnsignedShort(buffer.getShort());
-        }
+		private UDPHeader(ByteBuffer buffer)
+		{
+			this.sourcePort = BitUtils.getUnsignedShort(buffer.getShort());
+			this.destinationPort = BitUtils.getUnsignedShort(buffer.getShort());
 
-        private void fillHeader(ByteBuffer buffer)
-        {
-            buffer.putShort((short) this.sourcePort);
-            buffer.putShort((short) this.destinationPort);
+			this.length = BitUtils.getUnsignedShort(buffer.getShort());
+			this.checksum = BitUtils.getUnsignedShort(buffer.getShort());
+		}
 
-            buffer.putShort((short) this.length);
-            buffer.putShort((short) this.checksum);
-        }
+		private void fillHeader(ByteBuffer buffer)
+		{
+			buffer.putShort((short) this.sourcePort);
+			buffer.putShort((short) this.destinationPort);
 
-        @Override
-        public String toString()
-        {
-            final StringBuilder sb = new StringBuilder("UDPHeader{");
-            sb.append("sourcePort=").append(sourcePort);
-            sb.append(", destinationPort=").append(destinationPort);
-            sb.append(", length=").append(length);
-            sb.append(", checksum=").append(checksum);
-            sb.append('}');
-            return sb.toString();
-        }
-        public byte[] array() {
-        	
-            
+			buffer.putShort((short) this.length);
+			buffer.putShort((short) this.checksum);
+		}
+
+		@Override
+		public String toString()
+		{
+			final StringBuilder sb = new StringBuilder("UDPHeader{");
+			sb.append("sourcePort=").append(sourcePort);
+			sb.append(", destinationPort=").append(destinationPort);
+			sb.append(", length=").append(length);
+			sb.append(", checksum=").append(checksum);
+			sb.append('}');
+			return sb.toString();
+		}
+		public byte[] array() {
+
+
 			return null;
 		}
 
-    }
+	}
 
 }

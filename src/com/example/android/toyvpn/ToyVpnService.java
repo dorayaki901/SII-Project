@@ -102,12 +102,12 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					mInterface.getFileDescriptor());
 
 
-			ByteBuffer packet = ByteBuffer.allocate(1600);
+			ByteBuffer packet = ByteBuffer.allocate(160000);
 			int timer = 0;
 			int length = 0;
 			boolean idle;
 			
-	
+			int i = 0;
 			while (true) {
 				//idle = true;
 
@@ -115,9 +115,9 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				length = in.read(packet.array());      
 				if (length > 0) {
 					//packet.limit(length);
-					Thread logPacket= new Thread(new ThreadLog(out, packet, length, this));
+					Thread logPacket= new Thread(new ThreadLog(out, packet, length, this,i));
 					logPacket.start();
-					
+					i++;
 					packet.clear();
 
 					//idle = false;
