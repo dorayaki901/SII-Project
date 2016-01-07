@@ -30,6 +30,10 @@ import android.widget.Toast;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+import java.io.PipedReader;
+import java.io.PipedWriter;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -40,6 +44,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.Enumeration;
+import java.util.HashMap;
 
 import org.apache.http.conn.util.InetAddressUtils;
 
@@ -49,13 +54,11 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 	private String mServerAddress;
 	private int mServerPort = 1050;
+	public static final int MAX_PACKET_LENGTH = 1600;
 	private PendingIntent mConfigureIntent;
-
+	private HashMap<IdentifierKeyThread, InfoThread> mThreadMap;
 	private Thread mThread;
-	private Handler mHandler;
 	private ParcelFileDescriptor mInterface;
-	private String mParameters;
-	public byte[] InBuff = new byte[200]; 
 	//a. Configure a builder for the interface.
 	Builder builder = new Builder();
 
@@ -63,9 +66,10 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// The handler is only used to show messages.
 		mThread = new Thread(this, "ToyVpnThread");
+		mThreadMap = new HashMap<IdentifierKeyThread, InfoThread>();
 		//start the service
 		mThread.start();
-		
+
 		return START_STICKY;
 	}
 
@@ -94,19 +98,19 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					.addAddress("10.0.2.0",32)     	
 					.addRoute("0.0.0.0",0)
 					/*.addDnsServer("8.8.8.8")*/.establish();
-	
+
 			FileInputStream in = new FileInputStream(
 					mInterface.getFileDescriptor());
-			
+
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
 
-
-			ByteBuffer packet = ByteBuffer.allocate(160000);
+			IdentifierKeyThread key=new IdentifierKeyThread();
+			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
 			int timer = 0;
 			int length = 0;
 			boolean idle;
-			
+
 			int i = 0;
 			while (true) {
 				//idle = true;
@@ -114,10 +118,36 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				// Read the outgoing packet from the input stream.
 				length = in.read(packet.array());      
 				if (length > 0) {
-					//packet.limit(length);
-					Thread logPacket= new Thread(new ThreadLog(out, packet, length, this,i));
+					// check if a thread is already manage the connection 
+					Packet appPacket = new Packet(packet);
+					key.set(appPacket);
+					InfoThread info = mThreadMap.get(key);
+					if (info != null){ // Thread is mapped
+						if(info.mThread.isAlive()){
+							info.mPipeOutputStream.write(packet.array());
+							continue;
+						}
+						else 
+							mThreadMap.remove(info);
+
+					}
+
+					ThreadLog newThread = new ThreadLog(out, packet, length, this,i);
+					Thread logPacket = new Thread(newThread);
+
+					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
+					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
+					
+					InfoThread infoThread=new InfoThread(logPacket, writePipe);
+					
+					newThread.setPipe(readPipe);
+
+					mThreadMap.put(key, infoThread); 
+
 					logPacket.start();
+
 					i++;
+
 					packet.clear();
 
 					//idle = false;

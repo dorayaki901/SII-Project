@@ -5,6 +5,8 @@ import java.io.DataOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -30,10 +32,11 @@ public class ThreadLog implements Runnable {
 	Packet pktInfo = null;
 	int lengthRequest;
 	ByteBuffer packetBuffer;
-    int i;
-    
-    public boolean connected = true;
-    
+	int i;
+
+	public boolean connected = true;
+	private PipedInputStream readPipe;
+
 	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
 		this.packetBuffer = ByteBuffer.allocate(length);
 		this.i = i;
@@ -48,16 +51,16 @@ public class ThreadLog implements Runnable {
 
 	@Override
 	public void run() {
-		
-//				if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
-//					Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
-//					TCPSocket(pktInfo);
-//				}
+
+		//				if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
+		//					Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
+		//					TCPSocket(pktInfo);
+		//				}
 
 		//if(pktInfo.isUDP()){
-				//	UDPSocket();
-				//	return;
-				//}
+		//	UDPSocket();
+		//	return;
+		//}
 		//Se è TCP controllare se esiste già un thread che la sta gestendo
 		if(pktInfo.isTCP()){
 			TCPSocket(pktInfo);
@@ -65,7 +68,7 @@ public class ThreadLog implements Runnable {
 		}
 
 	}
-	
+
 	/**
 	 * brief Send and receive messages through an UDP connection
 	 */
@@ -132,67 +135,79 @@ public class ThreadLog implements Runnable {
 		DataOutputStream outToServer = null;
 		BufferedReader inFromServer = null;
 		Packet pktReply = null;
+	
+		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		try {
-			//Extract payload
-			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
-			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-			Log.i("ThreadLog", i +"paket" + pktInfo.toString());
-			/// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN 
-			//SYN pkt
-			if (pktInfo.tcpHeader.isSYN() && !pktInfo.tcpHeader.isACK()){
-				Log.d("ThreadLog",i + "SYN pkt received");
-				pktReply = SYN_ACKresponse(pktInfo, payload);
-				// Send SYN-ACK responce
-				out.write(pktReply.backingBuffer.array(), 0, pktReply.backingBuffer.array().length);
-				return;
-			}
-			//SYN-ACK pkt
-			//else if (pktInfo.tcpHeader.isSYN() && pktInfo.tcpHeader.isACK()){
-			//	pktReply = ACKresponse(pktInfo);
-			//}
-			//ACK pkt
-			if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
-				Log.i("ThreadLog",i + "ACK pkt received" + new String(payload));
-				//CONNECTED = true;
-				//pktReply = SYN_ACKresponse(pktInfo);
-				//	connected = true;
-				//La connessione è stabilita non devo far niente! (forse :'( )
-			}
-			//Open a connection with the outside
-			ssTCP = SocketChannel.open().socket();
-			//protect the VPN
-			if(!vpn.protect(ssTCP)){
-				Log.i("ThreadLog", "Error protect VPN");
-			}
-			ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
-			//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
-			ssTCP.setReuseAddress(true);
-			outToServer = new DataOutputStream(ssTCP.getOutputStream());
-			inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
 
-			//send request
-		
-			//Se ricevo msg di SYN-ACK non devo far nulla!
-			if(!(new String(payload)).equals("") && payload!= null){
-				Log.d("ThreadLog",i +"Payload sent to server" +  new String(payload));
-				outToServer.write(payload,0,payload.length);
+			do{
+				//Extract payload
+				byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
+				pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
 				
-				//receive the response
-				responce = inFromServer.readLine();
-				Log.d("ThreadLog", i + "-Responce:  " + responce);
-			}
-			Thread.sleep(200);
+				Log.i("ThreadLog", i +"paket" + pktInfo.toString());
+				
+				/// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN 
+				//SYN pkt
+				if (pktInfo.tcpHeader.isSYN() && !pktInfo.tcpHeader.isACK()){
+					Log.d("ThreadLog",i + "SYN pkt received");
+					pktReply = SYN_ACKresponse(pktInfo, payload);
+					// Send SYN-ACK responce
+					out.write(pktReply.backingBuffer.array(), 0, pktReply.backingBuffer.array().length);
+				}
+				
+				//ACK pkt
+				if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
+					Log.i("ThreadLog",i + "ACK pkt received" + new String(payload));
+					//pktReply = SYN_ACKresponse(pktInfo);
+				}
+
+				//SE il msg ha payload apro connessione e lo mando al server
+				if(!(new String(payload)).equals("") && payload!= null){
+
+					//Open a connection with the outside
+					ssTCP = SocketChannel.open().socket();
+					//protect the VPN
+					if(!vpn.protect(ssTCP)){
+						Log.i("ThreadLog", "Error protect VPN");
+					}
+					ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
+					//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
+					ssTCP.setReuseAddress(true);
+					outToServer = new DataOutputStream(ssTCP.getOutputStream());
+					inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
+
+					//send request
+					Log.d("ThreadLog",i +"Payload sent to server" +  new String(payload));
+					outToServer.write(payload,0,payload.length);
+
+					//receive the response
+					//char[] buff = new char[6000];
+					int n = 0;
+					//n = inFromServer.read(buff, 0, buff.length);
+					String line = inFromServer.readLine();
+					responce = "";
+					while(line!=null && !line.equals("")){
+						responce +=line;
+						line=inFromServer.readLine();
+					}
+					//responce = new String(buff);
+					Log.d("ThreadLog", i + "-Responce:  " + n +" \n" + responce );
+					
+					//TODO sendToApp(responce.getBytes());	
+					//Read from the pipe for the responce
+					readPipe.read(receivedPacket);
+					
+					pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+				}
+				Thread.sleep(200);
+			}while(true);
+	
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 
-		//sendToApp(responce.getBytes());	
+		
 
-	}
-
-	private Packet ACKresponse(Packet pktInfo2) {
-		// TODO Auto-generated method stub
-		return null;
 	}
 
 	/**
@@ -223,7 +238,7 @@ public class ThreadLog implements Runnable {
 	}
 
 	/**
-	 * Set the bit in position to the valueOfBit value
+	 * Set the bit in pos to the valueOfBit value
 	 * @param valueOfBit
 	 * @param pos
 	 * @param byteToSet
@@ -236,6 +251,12 @@ public class ThreadLog implements Runnable {
 			return( (byte) (byteToSet & ~(1 << pos+1)) );
 	}
 
+	/** 
+	 * Send to app the incoming packet
+	 * @param receiveData 
+	 * @param length
+	 * @param protocol
+	 */
 	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
 		//UDPheader+ipheader+length
 		pktInfo.updateSourceAndDestination();
@@ -260,6 +281,10 @@ public class ThreadLog implements Runnable {
 
 		} catch (IOException e) {e.printStackTrace();}
 
+	}
+
+	public void setPipe(PipedInputStream readPipe) {
+		this.readPipe=readPipe;		
 	}
 
 
