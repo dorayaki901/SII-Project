@@ -29,14 +29,15 @@ public class IdentifierKeyThread {
 	}
 	
 	public void set(Packet appPacket) {
-		this.destinationIP=appPacket.ip4Header.destinationAddress;
+		this.destinationIP = appPacket.ip4Header.destinationAddress;
 		if (appPacket.isTCP()){
-			this.destinationPort=appPacket.tcpHeader.destinationPort;
-			this.sourcePort=appPacket.tcpHeader.sourcePort;
-		}else{
-			this.destinationPort=appPacket.udpHeader.destinationPort;
-			this.sourcePort=appPacket.udpHeader.sourcePort;
+			this.destinationPort = appPacket.tcpHeader.destinationPort;
+			this.sourcePort = appPacket.tcpHeader.sourcePort;
+		}else if(appPacket.isUDP()){
+			this.destinationPort = appPacket.udpHeader.destinationPort;
+			this.sourcePort = appPacket.udpHeader.sourcePort;
 		}
+		//TODO else ??????? se è un altro tipo cm si fa? (può essere mi dava null pointer exception)
 		
 	}
 }

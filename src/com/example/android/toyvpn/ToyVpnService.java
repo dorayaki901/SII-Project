@@ -25,6 +25,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+import android.util.LogPrinter;
 import android.widget.Toast;
 
 import java.io.FileInputStream;
@@ -120,26 +121,41 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				if (length > 0) {
 					// check if a thread is already manage the connection 
 					Packet appPacket = new Packet(packet);
-					key.set(appPacket);
-					InfoThread info = mThreadMap.get(key);
-					if (info != null){ // Thread is mapped
-						if(info.mThread.isAlive()){
-							info.mPipeOutputStream.write(packet.array());
-							continue;
+				
+					if(appPacket != null){
+						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
+						key.set(appPacket);
+						InfoThread info = mThreadMap.get(key);
+						
+						if (info != null){ // Thread is mapped
+							if(info.mThread.isAlive()){
+								Log.i(TAG, "Write Pipe:" + appPacket.toString());
+								try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
+									//Es per scadenza timeout
+									info.mPipeOutputStream.write(packet.array());
+								} catch (IOException e) {
+									e.printStackTrace();
+									mThreadMap.remove(info);
+								}
+								continue;
+							}
+							else {
+								Log.i(TAG,"Thread already Dead ");
+								mThreadMap.remove(info);
+							}
+
 						}
-						else 
-							mThreadMap.remove(info);
-
 					}
-
+					// New Connection
+					Log.i(TAG,"New connection ");
 					ThreadLog newThread = new ThreadLog(out, packet, length, this,i);
 					Thread logPacket = new Thread(newThread);
 
 					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
 					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
-					
+
 					InfoThread infoThread=new InfoThread(logPacket, writePipe);
-					
+
 					newThread.setPipe(readPipe);
 
 					mThreadMap.put(key, infoThread); 

@@ -33,8 +33,8 @@ public class ThreadLog implements Runnable {
 	int lengthRequest;
 	ByteBuffer packetBuffer;
 	int i;
-
-	public boolean connected = true;
+	private static String TAG = "ThreadLog";
+	public boolean connected = false;
 	private PipedInputStream readPipe;
 
 	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
@@ -52,20 +52,20 @@ public class ThreadLog implements Runnable {
 	@Override
 	public void run() {
 
-		//				if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
-		//					Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
-		//					TCPSocket(pktInfo);
-		//				}
-
+		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
+			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
+			TCPSocket(pktInfo);
+		}
+		else{
+			return;		}
 		//if(pktInfo.isUDP()){
 		//	UDPSocket();
 		//	return;
 		//}
-		//Se è TCP controllare se esiste già un thread che la sta gestendo
-		if(pktInfo.isTCP()){
-			TCPSocket(pktInfo);
-			return;
-		}
+		//		if(pktInfo.isTCP()){
+		//			TCPSocket(pktInfo);
+		//			return;
+		//		}
 
 	}
 
@@ -135,7 +135,7 @@ public class ThreadLog implements Runnable {
 		DataOutputStream outToServer = null;
 		BufferedReader inFromServer = null;
 		Packet pktReply = null;
-	
+		connected = false;
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		try {
 
@@ -143,26 +143,30 @@ public class ThreadLog implements Runnable {
 				//Extract payload
 				byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
 				pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-				
-				Log.i("ThreadLog", i +"paket" + pktInfo.toString());
-				
+
+				Log.i("ThreadLog", i +"packet" + pktInfo.toString());
+
 				/// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN 
 				//SYN pkt
 				if (pktInfo.tcpHeader.isSYN() && !pktInfo.tcpHeader.isACK()){
 					Log.d("ThreadLog",i + "SYN pkt received");
 					pktReply = SYN_ACKresponse(pktInfo, payload);
-					// Send SYN-ACK responce
+					// Send SYN-ACK response
 					out.write(pktReply.backingBuffer.array(), 0, pktReply.backingBuffer.array().length);
 				}
-				
+
 				//ACK pkt
 				if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
 					Log.i("ThreadLog",i + "ACK pkt received" + new String(payload));
 					//pktReply = SYN_ACKresponse(pktInfo);
 				}
 
-				//SE il msg ha payload apro connessione e lo mando al server
+				//Se il msg ha payload apro connessione e lo mando al server
 				if(!(new String(payload)).equals("") && payload!= null){
+					Log.i(TAG,i + "pkt:  " + new String(payload));
+					
+					if(ssTCP==null){ // only the fist time
+					Log.i(TAG,i + " NEW CONNECTION");
 
 					//Open a connection with the outside
 					ssTCP = SocketChannel.open().socket();
@@ -170,14 +174,16 @@ public class ThreadLog implements Runnable {
 					if(!vpn.protect(ssTCP)){
 						Log.i("ThreadLog", "Error protect VPN");
 					}
-					ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
-					//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
-					ssTCP.setReuseAddress(true);
-					outToServer = new DataOutputStream(ssTCP.getOutputStream());
-					inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
-
+						ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
+						//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
+						ssTCP.setReuseAddress(true);
+						outToServer = new DataOutputStream(ssTCP.getOutputStream());
+						inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
+					
+					}
 					//send request
 					Log.d("ThreadLog",i +"Payload sent to server" +  new String(payload));
+
 					outToServer.write(payload,0,payload.length);
 
 					//receive the response
@@ -187,26 +193,29 @@ public class ThreadLog implements Runnable {
 					String line = inFromServer.readLine();
 					responce = "";
 					while(line!=null && !line.equals("")){
-						responce +=line;
-						line=inFromServer.readLine();
+						responce += line;
+						line = inFromServer.readLine();
 					}
 					//responce = new String(buff);
 					Log.d("ThreadLog", i + "-Responce:  " + n +" \n" + responce );
-					
+
 					//TODO sendToApp(responce.getBytes());	
 					//Read from the pipe for the responce
-					readPipe.read(receivedPacket);
-					
-					pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+
 				}
+				Log.i(TAG,i + "Reading From Pipe");
+				readPipe.read(receivedPacket);
+
+				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+				Log.i(TAG, i + "Read From Pipe:" + pktInfo.toString());
 				Thread.sleep(200);
 			}while(true);
-	
+
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 
-		
+
 
 	}
 
