@@ -36,7 +36,6 @@ public class Packet
 	public TCPHeader tcpHeader;
 	public UDPHeader udpHeader;
 	public ByteBuffer backingBuffer;
-	public int position;
 
 	private boolean isTCP;
 	private boolean isUDP;
@@ -114,7 +113,6 @@ public class Packet
 	{
 		
 			//per ora � implementato correttamente solo udp
-			position = backingBuffer.position();
 			backingBuffer.position(12);
 			backingBuffer.put(this.ip4Header.destinationAddress.getAddress(), 0, 4);
 			backingBuffer.put(this.ip4Header.sourceAddress.getAddress(), 0, 4);      
@@ -202,8 +200,9 @@ public class Packet
 	 */
 	public void updateUDPBuffer(byte[] array, int payloadSize)
 	{
+		
 		backingBuffer.position(ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
-		backingBuffer.put(array);
+		backingBuffer.put(array,0,payloadSize);
 
 		int udpTotalLength = UDP_HEADER_SIZE + payloadSize;
 		backingBuffer.putShort(IP4_HEADER_SIZE + 4, (short) udpTotalLength);

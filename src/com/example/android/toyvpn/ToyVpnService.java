@@ -49,7 +49,6 @@ import java.util.HashMap;
 
 import org.apache.http.conn.util.InetAddressUtils;
 
-
 public class ToyVpnService extends VpnService implements Handler.Callback, Runnable {
 	private static final String TAG = "ToyVpnService";
 
@@ -120,18 +119,27 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				length = in.read(packet.array());      
 				if (length > 0) {
 					// check if a thread is already manage the connection 
+
 					Packet appPacket = new Packet(packet);
-				
+					
+					if (appPacket.ip4Header.destinationAddress.getHostAddress().equals("151.15.182.56"))
+					{
+
+					
 					if(appPacket != null){
-						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
+//						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
 						key.set(appPacket);
+						
 						InfoThread info = mThreadMap.get(key);
 						
 						if (info != null){ // Thread is mapped
+							Log.i(TAG,"Destinazione gi‡ memorizzata");
 							if(info.mThread.isAlive()){
-								Log.i(TAG, "Write Pipe:" + appPacket.toString());
+								Log.i(TAG,"Thread Ancora Vivo");
+//								Log.i(TAG, "Write Pipe:" + appPacket.toString());
 								try{//TODO devo considerare il fatto che il thread mi pu√≤ morire tra i due momenti
 									//Es per scadenza timeout
+									Log.i(TAG,"Invio pkt su pipe: "+ length);
 									info.mPipeOutputStream.write(packet.array());
 								} catch (IOException e) {
 									e.printStackTrace();
@@ -140,14 +148,14 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 								continue;
 							}
 							else {
-								Log.i(TAG,"Thread already Dead ");
+								Log.i(TAG,"Thread morto ");
 								mThreadMap.remove(info);
 							}
 
 						}
 					}
 					// New Connection
-					Log.i(TAG,"New connection ");
+					Log.i(TAG,"Creazione nuovo Thread");
 					ThreadLog newThread = new ThreadLog(out, packet, length, this,i);
 					Thread logPacket = new Thread(newThread);
 
@@ -167,6 +175,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					packet.clear();
 
 					//idle = false;
+					}
 				}
 				Thread.sleep(1000);
 				// Thread.sleep(100);

@@ -38,34 +38,44 @@ public class ThreadLog implements Runnable {
 	private PipedInputStream readPipe;
 
 	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
+		inizializationPacket(out, packet, length, vpn, i);
+	}
+
+	private void inizializationPacket(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
 		this.packetBuffer = ByteBuffer.allocate(length);
 		this.i = i;
-		this.out=out;
-		this.vpn=vpn;
+		this.lengthRequest=length;
+		
+		if (pktInfo==null){
+			this.out=out;
+			this.vpn=vpn;
+		}
+		
 		try {
 			packetBuffer.put(packet.array(), 0, length);
 			packetBuffer.position(0);
 			pktInfo = new Packet(packetBuffer);
 		} catch (UnknownHostException e) {e.printStackTrace();}
+		
 	}
 
 	@Override
 	public void run() {
 
-		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
-			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
-			TCPSocket(pktInfo);
+//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
+//			Log.i("Log1", pktInfo.ip4Header.destinationAddress.getHostAddress()+":"+pktInfo.tcpHeader.destinationPort);
+//			TCPSocket(pktInfo);
+//		}
+//		else{
+//			return;		}
+		if(pktInfo.isUDP()){
+			UDPSocket();
+			return;
 		}
-		else{
-			return;		}
-		//if(pktInfo.isUDP()){
-		//	UDPSocket();
-		//	return;
-		//}
-		//		if(pktInfo.isTCP()){
-		//			TCPSocket(pktInfo);
-		//			return;
-		//		}
+//		if(pktInfo.isTCP()){
+//			TCPSocket(pktInfo);
+//			return;
+//		}
 
 	}
 
@@ -75,55 +85,121 @@ public class ThreadLog implements Runnable {
 	private void UDPSocket() {
 		DatagramChannel channel = null;
 		DatagramSocket ssUDP = null;
-		byte[] receiveData=new byte[1024];
+		byte[] receiveData=new byte[1500];
+		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 
-		// Send UDP message from APP to the OUTSIDE
-		try {
-			// Get the payload
-			byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
-			//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
-			pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
-			pktInfo.backingBuffer.get(payload, 0, lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE);
+		while(true){
+			// Send UDP message from APP to the OUTSIDE
+			try {
+				
+				//QUI MI DA NEGATIVE ARRAY SIZE
+				byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
+				//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
+				pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
+				pktInfo.backingBuffer.get(payload, 0, lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE);
+		
+				Log.i("ThreadLog", "UDP:"+ new String(payload)+"\nSIZE:"+payload.length);
+				
+				
+				if (channel==null){
+					channel = DatagramChannel.open();
+					ssUDP = channel.socket();
+			
+					if(!vpn.protect(ssUDP)){
+						Log.i("ThreadLog", "Error protect VPN");
+					}
+			
+					ssUDP.setReuseAddress(true);
+					ssUDP.setBroadcast(true);
+					ssUDP.bind(null);
+				}
 
-			//Log.i("ThreadLog", "UDP:"+ new String(payload)+"\nSIZE:"+payload.length);
-
-			channel = DatagramChannel.open();
-			ssUDP = channel.socket();
-
-			if(!vpn.protect(ssUDP)){
-				Log.i("ThreadLog", "Error protect VPN");
+				DatagramPacket sendPacket = new DatagramPacket(payload,payload.length, pktInfo.ip4Header.destinationAddress,pktInfo.udpHeader.destinationPort);
+		
+				ssUDP.send(sendPacket);
+		
+			} catch (Exception e) {e.printStackTrace();}
+		
+			// Receive the responses from OUTSIDE and send it to APP
+			DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+		
+			try {
+				ssUDP.receive(receivePacket);
+			} catch (IOException e) {
+				e.printStackTrace(); 
+				Log.i("ThreadLog", "ERROR");
 			}
+		
+			Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));		
+			//		ByteBuffer appSendByte=ByteBuffer.allocate(receivePacket.getLength());
+			//		appSendByte.put(receivePacket.getData(), 0, receivePacket.getLength());		
+			//		Log.i("ThreadLog", "responce:" +appSendByte.array().length+"  /   "+receivePacket.getLength());
+		
+			sendToApp(receivePacket.getData(),receivePacket.getLength(),true);	
+			
+			Log.i("ThreadLog", "post send to app");
+			try {
+				lengthRequest=readPipe.read(receivedPacket);
+				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+				
+				Log.i("ThreadLog - Lunghezza", lengthRequest+"");
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}	
+		}
+	}
 
-			ssUDP.setReuseAddress(true);
-			ssUDP.setBroadcast(true);
-			ssUDP.bind(null);
+	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
+		//UDPheader+ipheader+length
+		ByteBuffer bufferToSend = null;
+		Packet prova = null;
+		int lengthPacket=length+pktInfo.ip4Header.headerLength;
+		
+		//Instanziazine ByteBuffer di risposta
+		lengthPacket += (protocol) ? Packet.UDP_HEADER_SIZE: pktInfo.tcpHeader.headerLength;		
+		bufferToSend =  ByteBuffer.allocate(lengthPacket);
+		
+		Log.i("ThreadLog", lengthPacket+" / "+pktInfo.backingBuffer.array().length);
+		
+		//Clone dell'header di richiesta
+		
+		
+		if (pktInfo.backingBuffer.array().length>lengthPacket)
+		    bufferToSend.put(pktInfo.backingBuffer.array(),0, lengthPacket);
+		else
+			bufferToSend.put(pktInfo.backingBuffer.array());
+			
+		//Creazine Pachetto di risposta
+		try {
+			bufferToSend.position(0);
+			prova = new Packet(bufferToSend);
+		} catch (UnknownHostException e1) {	e1.printStackTrace(); }
 
-			DatagramPacket sendPacket = new DatagramPacket(payload,payload.length, pktInfo.ip4Header.destinationAddress,pktInfo.udpHeader.destinationPort);
+		prova.updateSourceAndDestination();
+		
+		Log.i("ThreadLog",prova.toString());
+		
+		try{
+		
+		if (protocol){
+			prova.updateUDPBuffer(receiveData,length);
+		}//else
+		//pktInfo.updateTCPBuffer(ByteBuffer.wrap(receiveData2), , 0, 0, 0);
+		
+		}catch (Exception e1) {	e1.printStackTrace(); }
+		
+		
 
-			ssUDP.send(sendPacket);
+		Log.i("ThreadLog-", "dim. responce:" +prova.ip4Header.totalLength+"\n"+prova.toString());
+		Log.i("ThreadLog - Post Update", "body:\n"+(new String(prova.backingBuffer.array())));
+		try {
+
+			out.write(prova.backingBuffer.array(), 0, prova.ip4Header.totalLength);
 
 		} catch (Exception e) {e.printStackTrace();}
 
-		// Receive the responses from OUTSIDE and send it to APP
-		DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-
-		try {
-			ssUDP.receive(receivePacket);
-		} catch (IOException e) {
-			e.printStackTrace(); 
-			Log.i("ThreadLog", "ERROR");
-		}
-
-		Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));
-
-		//		ByteBuffer appSendByte=ByteBuffer.allocate(receivePacket.getLength());
-		//		appSendByte.put(receivePacket.getData(), 0, receivePacket.getLength());
-
-		//		Log.i("ThreadLog", "responce:" +appSendByte.array().length+"  /   "+receivePacket.getLength());
-
-		sendToApp(receivePacket.getData(),receivePacket.getLength(),true);	
 	}
-
 
 	/**
 	 * brief Send and receive messages through an TCP connection
@@ -266,31 +342,7 @@ public class ThreadLog implements Runnable {
 	 * @param length
 	 * @param protocol
 	 */
-	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
-		//UDPheader+ipheader+length
-		pktInfo.updateSourceAndDestination();
-		if (protocol){
-			pktInfo.updateUDPBuffer(receiveData,length);
-
-		}//else
-		//pktInfo.updateTCPBuffer(ByteBuffer.wrap(receiveData2), , 0, 0, 0);
-		Packet prova = null;
-		try {
-			prova = new Packet(pktInfo.backingBuffer);
-		} catch (UnknownHostException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-
-		Log.i("ThreadLog-", "dim. responce:" +pktInfo.ip4Header.totalLength+"\n"+prova.toString());
-		Log.i("ThreadLog-", "body:"+(new String(pktInfo.backingBuffer.array())));
-		try {
-
-			out.write(pktInfo.backingBuffer.array(), 0, prova.ip4Header.totalLength);
-
-		} catch (IOException e) {e.printStackTrace();}
-
-	}
+	
 
 	public void setPipe(PipedInputStream readPipe) {
 		this.readPipe=readPipe;		
