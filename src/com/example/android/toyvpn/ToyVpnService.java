@@ -122,9 +122,8 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 					Packet appPacket = new Packet(packet);
 					
-					if (appPacket.ip4Header.destinationAddress.getHostAddress().equals("151.15.182.56"))
-					{
-
+			
+						Log.i(TAG,"PKT CATTURATO!");
 					
 					if(appPacket != null){
 //						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
@@ -133,14 +132,14 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 						InfoThread info = mThreadMap.get(key);
 						
 						if (info != null){ // Thread is mapped
-							Log.i(TAG,"Destinazione gi‡ memorizzata");
+							Log.i(TAG,"DESTINAZIONE GI‡ MEMORIZZATA");
 							if(info.mThread.isAlive()){
-								Log.i(TAG,"Thread Ancora Vivo");
+								Log.i(TAG,"THREAD ANCORA VIVO");
 //								Log.i(TAG, "Write Pipe:" + appPacket.toString());
 								try{//TODO devo considerare il fatto che il thread mi pu√≤ morire tra i due momenti
 									//Es per scadenza timeout
-									Log.i(TAG,"Invio pkt su pipe: "+ length);
-									info.mPipeOutputStream.write(packet.array());
+									Log.i(TAG,"INVIO PKT SU PIPE: "+ length);
+									info.mPipeOutputStream.write(packet.array(),0,length);
 								} catch (IOException e) {
 									e.printStackTrace();
 									mThreadMap.remove(info);
@@ -148,14 +147,14 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 								continue;
 							}
 							else {
-								Log.i(TAG,"Thread morto ");
+								Log.i(TAG,"THREAD MORTO");
 								mThreadMap.remove(info);
 							}
 
 						}
 					}
 					// New Connection
-					Log.i(TAG,"Creazione nuovo Thread");
+					Log.i(TAG,"CREAZIONE NUOVO THREAD");
 					ThreadLog newThread = new ThreadLog(out, packet, length, this,i);
 					Thread logPacket = new Thread(newThread);
 
@@ -172,10 +171,11 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 					i++;
 
-					packet.clear();
+					//packet.clear();
 
 					//idle = false;
-					}
+					
+					packet.clear();
 				}
 				Thread.sleep(1000);
 				// Thread.sleep(100);

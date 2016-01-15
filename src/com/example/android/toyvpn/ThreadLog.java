@@ -130,7 +130,7 @@ public class ThreadLog implements Runnable {
 				Log.i("ThreadLog", "ERROR");
 			}
 		
-			Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));		
+			//Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));		
 			//		ByteBuffer appSendByte=ByteBuffer.allocate(receivePacket.getLength());
 			//		appSendByte.put(receivePacket.getData(), 0, receivePacket.getLength());		
 			//		Log.i("ThreadLog", "responce:" +appSendByte.array().length+"  /   "+receivePacket.getLength());
@@ -160,7 +160,7 @@ public class ThreadLog implements Runnable {
 		lengthPacket += (protocol) ? Packet.UDP_HEADER_SIZE: pktInfo.tcpHeader.headerLength;		
 		bufferToSend =  ByteBuffer.allocate(lengthPacket);
 		
-		Log.i("ThreadLog", lengthPacket+" / "+pktInfo.backingBuffer.array().length);
+		//Log.i("ThreadLog", lengthPacket+" / "+pktInfo.backingBuffer.array().length);
 		
 		//Clone dell'header di richiesta
 		
@@ -178,7 +178,7 @@ public class ThreadLog implements Runnable {
 
 		prova.updateSourceAndDestination();
 		
-		Log.i("ThreadLog",prova.toString());
+		//Log.i("ThreadLog",prova.toString());
 		
 		try{
 		
@@ -191,8 +191,8 @@ public class ThreadLog implements Runnable {
 		
 		
 
-		Log.i("ThreadLog-", "dim. responce:" +prova.ip4Header.totalLength+"\n"+prova.toString());
-		Log.i("ThreadLog - Post Update", "body:\n"+(new String(prova.backingBuffer.array())));
+//		Log.i("ThreadLog-", "dim. responce:" +prova.ip4Header.totalLength+"\n"+prova.toString());
+//		Log.i("ThreadLog - Post Update", "body:\n"+(new String(prova.backingBuffer.array())));
 		try {
 
 			out.write(prova.backingBuffer.array(), 0, prova.ip4Header.totalLength);
