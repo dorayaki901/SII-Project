@@ -172,7 +172,41 @@ public class Packet
 
 		updateIP4Checksum();
 	}
+	/**
+	 * 
+	 * @param array
+	 * @param flags
+	 * @param payloadSize
+	 */
+	public void updateTCPBuffer(byte[] array, byte flags, int payloadSize)
+	{
+		long sequenceNumber=tcpHeader.sequenceNumber+payloadSize;
+		backingBuffer.position(ip4Header.headerLength+tcpHeader.headerLength);
+		backingBuffer.put(array,0,payloadSize);
 
+		tcpHeader.flags = flags;
+		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
+
+		tcpHeader.sequenceNumber = tcpHeader.acknowledgementNumber;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) tcpHeader.acknowledgementNumber);
+
+		tcpHeader.acknowledgementNumber = sequenceNumber;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) sequenceNumber);
+
+		// Reset header size, since we don't need options
+		byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
+		tcpHeader.dataOffsetAndReserved = dataOffset;
+		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
+
+		updateTCPChecksum(payloadSize);
+
+		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
+
+		updateIP4Checksum();
+		backingBuffer.position(0);
+	}
 	public void updateUDPBuffer(ByteBuffer buffer, int payloadSize)
 	{
 
@@ -395,7 +429,7 @@ public class Packet
 			sb.append(", IHL=").append(IHL);
 			sb.append(", typeOfService=").append(typeOfService);
 			sb.append(", totalLength=").append(totalLength);
-			sb.append(", identificationAndFlagsAndFragmentOffset=").append(identificationAndFlagsAndFragmentOffset);
+			sb.append(", identificationAndFlagsAndFragmentOffset=").append(Integer.toBinaryString(identificationAndFlagsAndFragmentOffset));
 			sb.append(", TTL=").append(TTL);
 			sb.append(", protocol=").append(protocolNum).append(":").append(protocol);
 			sb.append(", headerChecksum=").append(headerChecksum);

@@ -25,6 +25,7 @@ import junit.framework.Protectable;
 import android.hardware.Camera.Parameters;
 import android.net.VpnService;
 import android.util.Log;
+import android.util.LogPrinter;
 
 public class ThreadLog implements Runnable {
 	FileOutputStream out;
@@ -39,6 +40,10 @@ public class ThreadLog implements Runnable {
 
 	public ThreadLog(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
 		inizializationPacket(out, packet, length, vpn, i);
+	}
+	
+	public void setPipe(PipedInputStream readPipe) {
+		this.readPipe=readPipe;		
 	}
 
 	private void inizializationPacket(FileOutputStream out, ByteBuffer packet,int length, VpnService vpn,int i) {
@@ -62,19 +67,19 @@ public class ThreadLog implements Runnable {
 	@Override
 	public void run() {
 
-		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
-			Log.i(TAG, "Starting new Thread for connection at:" + pktInfo.ip4Header.destinationAddress.getHostAddress() + ":" + pktInfo.tcpHeader.destinationPort);
-			TCPSocket(pktInfo);
-		}
+//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("178.236.7.146")){
+//			Log.i(TAG, "Starting new Thread for connection at:" + pktInfo.ip4Header.destinationAddress.getHostAddress() + ":" + pktInfo.tcpHeader.destinationPort);
+//			TCPSocket(pktInfo);
+//		}
 
 		//		if(pktInfo.isUDP()){
 		//			UDPSocket();
 		//			return;
 		//		}
-		//		if(pktInfo.isTCP()){
-		//			TCPSocket(pktInfo);
-		//			return;
-		//		}
+				if(pktInfo.isTCP()){
+					TCPSocket(pktInfo);
+					return;
+				}
 
 	}
 
@@ -148,58 +153,7 @@ public class ThreadLog implements Runnable {
 			}	
 		}
 	}
-
-	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
-		//UDPheader+ipheader+length
-		ByteBuffer bufferToSend = null;
-		Packet prova = null;
-		int lengthPacket=length+pktInfo.ip4Header.headerLength;
-
-		//Instanziazine ByteBuffer di risposta
-		lengthPacket += (protocol) ? Packet.UDP_HEADER_SIZE: pktInfo.tcpHeader.headerLength;		
-		bufferToSend =  ByteBuffer.allocate(lengthPacket);
-
-		//Log.i("ThreadLog", lengthPacket+" / "+pktInfo.backingBuffer.array().length);
-
-		//Clone dell'header di richiesta
-
-
-		if (pktInfo.backingBuffer.array().length>lengthPacket)
-			bufferToSend.put(pktInfo.backingBuffer.array(),0, lengthPacket);
-		else
-			bufferToSend.put(pktInfo.backingBuffer.array());
-
-		//Creazine Pachetto di risposta
-		try {
-			bufferToSend.position(0);
-			prova = new Packet(bufferToSend);
-		} catch (UnknownHostException e1) {	e1.printStackTrace(); }
-
-		prova.updateSourceAndDestination();
-
-		//Log.i("ThreadLog",prova.toString());
-
-		try{
-
-			if (protocol){
-				prova.updateUDPBuffer(receiveData,length);
-			}//else
-			//pktInfo.updateTCPBuffer(ByteBuffer.wrap(receiveData2), , 0, 0, 0);
-
-		}catch (Exception e1) {	e1.printStackTrace(); }
-
-
-
-		//		Log.i("ThreadLog-", "dim. responce:" +prova.ip4Header.totalLength+"\n"+prova.toString());
-		//		Log.i("ThreadLog - Post Update", "body:\n"+(new String(prova.backingBuffer.array())));
-		try {
-
-			out.write(prova.backingBuffer.array(), 0, prova.ip4Header.totalLength);
-
-		} catch (Exception e) {e.printStackTrace();}
-
-	}
-
+	
 	/**
 	 * brief Send and receive messages through an TCP connection
 	 * @param pktInfo
@@ -278,7 +232,7 @@ public class ThreadLog implements Runnable {
 					//responce = new String(buff);
 					Log.d("ThreadLog", i + "-Responce:  " + n +" \n" + responce );
 
-					//TODO sendToApp(responce.getBytes());	
+					 //sendToApp(responce.getBytes(),);	
 					//Read from the pipe for the responce
 
 				}
@@ -296,7 +250,10 @@ public class ThreadLog implements Runnable {
 					tot += length ;
 				}
 				Log.i(TAG, i + "byteRead	1: " + tot );
+
+						
 				tot = 0;
+				length = 0;
 				dimP = ByteBuffer.wrap(sizeBuff).getInt();
 				Log.i(TAG, i + "DimP: " + dimP );
 				while(dimP>tot){
@@ -309,9 +266,9 @@ public class ThreadLog implements Runnable {
 				}								
 				Log.i(TAG, i + "TOT: " + tot);
 
-				ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
-				packetBuffer.put(receivedPacket, 0, tot);
-				packetBuffer.flip();
+				ByteBuffer packetBuffer = ByteBuffer.allocate(dimP);
+				packetBuffer.put(receivedPacket, 0, dimP);
+				packetBuffer.position(0);
 				pktInfo  = new Packet(packetBuffer);
 //				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
 
@@ -375,9 +332,38 @@ public class ThreadLog implements Runnable {
 	 * @param protocol
 	 */
 
+	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
+		ByteBuffer bufferToSend = null;
+		Packet prova = null;
+		int lengthPacket=length+pktInfo.ip4Header.headerLength;
 
-	public void setPipe(PipedInputStream readPipe) {
-		this.readPipe=readPipe;		
+		lengthPacket += (protocol) ? Packet.UDP_HEADER_SIZE : pktInfo.tcpHeader.headerLength;		
+		bufferToSend =  ByteBuffer.allocate(lengthPacket);
+
+		if (pktInfo.backingBuffer.array().length>lengthPacket)
+			bufferToSend.put(pktInfo.backingBuffer.array(),0, lengthPacket);
+		else
+			bufferToSend.put(pktInfo.backingBuffer.array());
+
+		try {
+			bufferToSend.position(0);
+			prova = new Packet(bufferToSend);
+		} catch (UnknownHostException e1) {	e1.printStackTrace(); }
+
+		prova.updateSourceAndDestination();
+
+		try{
+
+			if (protocol){
+				prova.updateUDPBuffer(receiveData,length);
+			}
+				//prova.updateTCPBuffer(receiveData, (byte) TCPHeader.ACK ,length);
+
+		}catch (Exception e1) {	e1.printStackTrace(); }
+
+		try {
+			out.write(prova.backingBuffer.array(), 0, prova.ip4Header.totalLength);
+		} catch (Exception e) {e.printStackTrace();}
 	}
 
 

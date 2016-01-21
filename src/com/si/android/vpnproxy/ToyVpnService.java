@@ -128,10 +128,10 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 						packet.clear();
 						continue;
 					}
-					if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
-						packet.clear();
-						continue;
-					}
+					//if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("54.239.17.6")){
+					//	packet.clear();
+					//	continue;
+					//}
 					//					ByteBuffer packetBuffer = ByteBuffer.allocate(length);
 					//					packetBuffer.put(packet.array(), 0, length);
 					//					packetBuffer.position(0);
@@ -149,7 +149,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 							if(info.mThread.isAlive()){
 								//	Log.i(TAG,"THREAD ANCORA VIVO");
 								Log.i(TAG, "Write Pipe:" + length+": " + appPacket.toString());
-								//	try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
+									try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
 								//Es per scadenza timeout
 							
 								ByteBuffer b = ByteBuffer.allocate(4);
@@ -161,10 +161,10 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 								info.mPipeOutputStream.write(packet.array(),0,length);
 								info.mPipeOutputStream.flush();
 
-								//	} catch (IOException e) {
-								//		e.printStackTrace();
-								//		mThreadMap.remove(info);
-								//	}
+									} catch (IOException e) {
+										e.printStackTrace();
+										mThreadMap.remove(info);
+									}
 								continue;
 							}
 							else {
