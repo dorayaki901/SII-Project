@@ -5,10 +5,12 @@ import java.net.InetAddress;
 import android.util.Log;
 
 public class IdentifierKeyThread {
+	private static final String TAG = "IdentifierKeyThread";
 	public InetAddress destinationIP;
 	public int destinationPort;
 	public int sourcePort;
 	public boolean isTCP;
+	public int hashCode;
 
 
 	public void setDestinationIP(InetAddress destinationIP) {
@@ -27,6 +29,7 @@ public class IdentifierKeyThread {
 
 	@Override
 	public boolean equals(Object o) {
+		Log.i(TAG,"Equals ");
 		IdentifierKeyThread app = (IdentifierKeyThread) o;	
 
 		if (app.destinationIP.getHostAddress().equals(destinationIP.getHostAddress()) 
@@ -41,8 +44,8 @@ public class IdentifierKeyThread {
 
 	@Override
 	public int hashCode() {
-		String hashString = destinationIP.getHostAddress()+destinationPort+sourcePort+isTCP;
-		return hashString.hashCode();
+		Log.i(TAG,"hashCode: "+hashCode+"  Porta:"+sourcePort);
+		return hashCode;
 	}
 
 	public void set(Packet appPacket) {
@@ -59,8 +62,23 @@ public class IdentifierKeyThread {
 			this.sourcePort = appPacket.udpHeader.sourcePort;
 			this.isTCP = false;
 		}
+		
+		String hashString = destinationIP.getHostAddress()+destinationPort+sourcePort+isTCP;
+		hashCode=hashString.hashCode();
 
 		//TODO else ??????? se è un altro tipo cm si fa? (può essere mi dava null pointer exception)
 
 	}
+	
+	@Override
+	public String toString() {
+		final StringBuilder sb = new StringBuilder("IdentifierThread{");
+		sb.append("sourcePort=").append(sourcePort);
+		sb.append(", destinationPort=").append(destinationPort);
+		sb.append(", hashCode=").append(hashCode);
+		sb.append('}');
+		return sb.toString();
+	}
+	
+	
 }

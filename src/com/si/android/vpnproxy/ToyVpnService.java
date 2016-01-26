@@ -17,37 +17,21 @@
 package com.si.android.vpnproxy;
 
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Intent;
 import android.net.VpnService;
-import android.net.VpnService.Builder;
 import android.os.Handler;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
-import android.util.LogPrinter;
 import android.widget.Toast;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
-import java.io.PipedReader;
-import java.io.PipedWriter;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.nio.channels.DatagramChannel;
-import java.util.Enumeration;
 import java.util.HashMap;
-
-import org.apache.http.conn.util.InetAddressUtils;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ToyVpnService extends VpnService implements Handler.Callback, Runnable {
 	private static final String TAG = "ToyVpnService";
@@ -61,11 +45,11 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	private ParcelFileDescriptor mInterface;
 	//a. Configure a builder for the interface.
 	Builder builder = new Builder();
+	int count=0;
 
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// The handler is only used to show messages.
-		Log.i(TAG, "Service Starting");
 		mThread = new Thread(this, "ToyVpnThread");
 		mThreadMap = new HashMap<IdentifierKeyThread, InfoThread>();
 		//start the service
@@ -93,25 +77,32 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	public synchronized void run() {
 		try {
 			//a. Configure the TUN and get the interface.
-
+			ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue = new ConcurrentLinkedQueue<ByteBuffer>();
+			
 			mInterface = builder.setSession("MyVPNService")
-					//.setMtu(1500)
-					.addAddress("10.0.2.0",32)     	
+					.setMtu(3000)
+					.addAddress("10.0.0.2",32)     	
 					.addRoute("0.0.0.0",0)
 					/*.addDnsServer("8.8.8.8")*/.establish();
-
+			if(mInterface == null) 
+				Log.i(TAG,"error: vpn not prepared");
 			FileInputStream in = new FileInputStream(
 					mInterface.getFileDescriptor());
 
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
-
+			/****/
+			
+			SendToApp writeThread = new SendToApp(out,sentoToAppQueue);
+			Thread sendToApp = new Thread(writeThread);
+			sendToApp.start();
+			/****/
 			IdentifierKeyThread key = new IdentifierKeyThread();
 			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
 			int timer = 0;
 			int length = 0;
 			boolean idle;
-
+			
 			int i = 0;
 			while (true) {
 				//idle = true;
@@ -124,69 +115,78 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					Packet appPacket = new Packet(packet);
 
 					if(appPacket == null){
-						Log.i(TAG, "Error packt NULL");
 						packet.clear();
 						continue;
 					}
-					if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("207.244.90.212")){
+					if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
+						
 						packet.clear();
+						
 						continue;
 					}
+					
+					//pezzo aggiunto con il count
+//					if (count>2)
+//						continue;
+					
+					
 					//					ByteBuffer packetBuffer = ByteBuffer.allocate(length);
 					//					packetBuffer.put(packet.array(), 0, length);
 					//					packetBuffer.position(0);
 					//					Packet appPacket = new Packet(packetBuffer);
 
-					//	Log.i(TAG,"PKT CATTURATO!");
-
-						//						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
-						key.set(appPacket);
-
-						InfoThread info = mThreadMap.get(key);
-
-						if (info != null){ // Thread is mapped
-							//	Log.i(TAG,"DESTINAZIONE GIA MEMORIZZATA");
-							if(info.mThread.isAlive()){
-								//	Log.i(TAG,"THREAD ANCORA VIVO");
-								Log.i(TAG, "Write Pipe:" + length+": " + appPacket.toString());
-								//	try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
-								//Es per scadenza timeout
-							
-								ByteBuffer b = ByteBuffer.allocate(4);
-								b.putInt(length);
-								b.position(0);
-								Log.i(TAG,"INVIO PKT SU PIPE: "+ length + b.getInt());
-								info.mPipeOutputStream.write(b.array(),0,4);
-								info.mPipeOutputStream.flush();
-								info.mPipeOutputStream.write(packet.array(),0,length);
-								info.mPipeOutputStream.flush();
-
-								//	} catch (IOException e) {
-								//		e.printStackTrace();
-								//		mThreadMap.remove(info);
-								//	}
-								continue;
-							}
-							else {
-								//	Log.i(TAG,"THREAD MORTO");
-								mThreadMap.remove(info);
-							}
-
-						}
+//						Log.i(TAG,"PKT CATTURATO!");
+//					    Log.i(TAG,"PACKET ARRIVED: SPort-"+appPacket.tcpHeader.sourcePort+" DPort-"+appPacket.tcpHeader.destinationPort+" Sequence-"
+//					    		+appPacket.tcpHeader.sequenceNumber+" Type-"+appPacket.tcpHeader.flags);
+					 //   Log.i("IdentifierKeyThread","PACKET ARRIVED: "+appPacket.tcpHeader.toString());
 					
+						//						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
+//						key.set(appPacket);
+//						InfoThread info = mThreadMap.get(key);
+						
+//						if (info != null){ // Thread is mapped
+//								//Log.i("IdentifierKeyThread","DESTINAZIONE GIA MEMORIZZATA");
+//							if(info.mThread.isAlive()){
+//								//	Log.i(TAG,"THREAD ANCORA VIVO");
+//								//Log.i(TAG, "Write Pipe:" + length+": " + appPacket.toString());
+//								//	try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
+//								//Es per scadenza timeout
+//							
+////								ByteBuffer b = ByteBuffer.allocate(4);
+////								b.putInt(length);
+////								b.position(0);
+////								Log.i(TAG,"INVIO PKT SU PIPE: "+ length + b.getInt());
+////								info.mPipeOutputStream.write(b.array(),0,4);
+////								info.mPipeOutputStream.flush();
+////								info.mPipeOutputStream.write(packet.array(),0,length);
+////								info.mPipeOutputStream.flush();
+//
+//								//	} catch (IOException e) {
+//								//		e.printStackTrace();
+//								//		mThreadMap.remove(info);
+//								//	}
+//								continue;
+//							}
+//							else {
+//								//Log.i(TAG,"THREAD MORTO");
+//								mThreadMap.remove(info);
+//							}
+//
+//						}
+//					
 					// New Connection
-					//					Log.i(TAG,"CREAZIONE NUOVO THREAD");
-					ThreadLog newThread = new ThreadLog(out, packet, length, this,i);
+//					Log.i("IdentifierKeyThread","CREAZIONE NUOVO THREAD");
+					ThreadLog newThread = new ThreadLog(out, packet, length, this,i,sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
-					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
-
-					InfoThread infoThread=new InfoThread(logPacket, writePipe);
-
-					newThread.setPipe(readPipe);
-
-					mThreadMap.put(key, infoThread); 
+//					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
+//					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
+//
+//					InfoThread infoThread=new InfoThread(logPacket, writePipe);
+//
+//					newThread.setPipe(readPipe);
+//
+//					mThreadMap.put(key, infoThread); 
 
 					logPacket.start();
 
@@ -195,9 +195,10 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					//idle = false;
 
 					packet.clear();
+					
 				}
-				Thread.sleep(1000);
-				// Thread.sleep(100);
+				 Thread.sleep(1000);
+				
 				// If we are idle or waiting for the network, sleep for a
 				// fraction of time to avoid busy looping.
 				// if (idle) {

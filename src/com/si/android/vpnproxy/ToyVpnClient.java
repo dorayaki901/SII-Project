@@ -55,6 +55,7 @@ public class ToyVpnClient extends Activity implements View.OnClickListener {
 
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
+    	super.onActivityResult(request, result, data);
         if (result == RESULT_OK) {
 //            String prefix = getPackageName();
             Intent intent = new Intent(this, ToyVpnService.class);

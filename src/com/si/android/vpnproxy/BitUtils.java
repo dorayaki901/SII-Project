@@ -39,4 +39,11 @@ class BitUtils
         return ByteBuffer.wrap(bytes).getInt();
    }
     
+	static byte setBit(int valueOfBit,int pos, byte byteToSet){
+		if(valueOfBit==1)
+			return( (byte) (byteToSet | (1 << (pos-1))) );
+		else
+			return( (byte) (byteToSet & ~(1 << pos+1)) );
+	}
+    
 }

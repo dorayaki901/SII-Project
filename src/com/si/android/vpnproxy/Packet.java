@@ -172,7 +172,112 @@ public class Packet
 
 		updateIP4Checksum();
 	}
+	/**
+	 * FATTA DA MARINAAAAAAAAAaa
+	 * @param buffer
+	 * @param flags
+	 * @param sequenceNum
+	 * @param ackNum
+	 * @param payloadSize
+	 */
+	public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize, ByteBuffer payload)
+	{
+		;
+		buffer.position(0);
+		payload.position(0);
+		fillHeader(buffer);
+		Log.d("paket P","payload: " + payloadSize);
 
+		backingBuffer = buffer;
+		Log.d("paket P","backingbuffer: " + new String(backingBuffer.array()));
+
+		int pos = buffer.position();
+		backingBuffer.position(TCP_HEADER_SIZE + IP4_HEADER_SIZE);
+		Log.d("paket P","IHL: " + ip4Header.IHL);
+
+
+		backingBuffer.put(payload.array(),0,payloadSize);
+		backingBuffer.position(pos);
+		
+		Log.d("paket P","PKT DA PKT: " + new String(backingBuffer.array())+ new String(payload.array()));
+		tcpHeader.flags = flags;
+		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
+
+		tcpHeader.sequenceNumber = sequenceNum;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) sequenceNum);
+
+		tcpHeader.acknowledgementNumber = ackNum;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) ackNum);
+
+		// Reset header size, since we don't need options
+		byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
+		tcpHeader.dataOffsetAndReserved = dataOffset;
+		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
+
+		updateTCPChecksum(payloadSize);
+
+		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
+		
+		//backingBuffer.putShort(2, (short) 0);
+
+		updateIP4Checksum();
+	}
+	
+	/**
+	 * Update the TCP packet
+	 * @param array the payload
+	 * @param flags	TCPHeader.Ack with cast a byte
+	 * @param sequenceNum ACK value of sent packet
+	 * @param ackNum sequenceNumber of 
+	 * @param payloadSize
+	 */
+	public void updateTCPBuffer(byte[] array, int payloadSize)
+	{
+		fillHeader(ByteBuffer.wrap(array));
+		byte flags=(byte) tcpHeader.flags;
+		flags = BitUtils.setBit(0, 1, flags); // Fin bit
+		flags = BitUtils.setBit(0, 2, flags); // Syn bit
+		flags = BitUtils.setBit(1, 5, flags); // Ack bit
+
+//		Log.i("sendToApp", "ORIGINAL: "+ Integer.toBinaryString(Integer.valueOf(tcpHeader.flags)));
+//		Log.i("sendToApp", "NEW: "+ Integer.toBinaryString(Integer.valueOf(flags)));
+//		Log.i("sendToApp", "OLD S: "+ tcpHeader.sequenceNumber);
+//		Log.i("sendToApp", "OLD A: "+ tcpHeader.acknowledgementNumber);
+		
+		long acknowledgmentNumber = tcpHeader.sequenceNumber+payloadSize;
+		backingBuffer.position(ip4Header.headerLength+tcpHeader.headerLength);
+		backingBuffer.put(array,0,payloadSize);
+		
+		tcpHeader.flags = flags;
+		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
+		
+
+		tcpHeader.sequenceNumber = tcpHeader.acknowledgementNumber;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) tcpHeader.acknowledgementNumber);
+
+		tcpHeader.acknowledgementNumber = acknowledgmentNumber;
+		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) acknowledgmentNumber);
+
+//		Log.i("sendToApp", "NEW S: "+ tcpHeader.sequenceNumber);
+//		Log.i("sendToApp", "NEW A: "+ tcpHeader.acknowledgementNumber);
+		// Reset header size, since we don't need options
+		byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
+		tcpHeader.dataOffsetAndReserved = dataOffset;
+		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
+
+		updateTCPChecksum(payloadSize);
+
+		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
+		backingBuffer.putShort(2, (short) ip4TotalLength);
+		ip4Header.totalLength = ip4TotalLength;
+
+		updateIP4Checksum();
+		backingBuffer.position(0);
+	}
+	
+	
 	public void updateUDPBuffer(ByteBuffer buffer, int payloadSize)
 	{
 
@@ -257,11 +362,11 @@ public class Packet
 		sum += BitUtils.getUnsignedShort(buffer.getShort()) + BitUtils.getUnsignedShort(buffer.getShort());
 
 		sum += IP4Header.TransportProtocol.TCP.getNumber() + tcpLength;
-
+		
 		buffer = backingBuffer.duplicate();
 		// Clear previous checksum
 		buffer.putShort(IP4_HEADER_SIZE + 16, (short) 0);
-
+		
 		// Calculate TCP segment checksum
 		buffer.position(IP4_HEADER_SIZE);
 		while (tcpLength > 1)
@@ -386,7 +491,7 @@ public class Packet
 			buffer.put(this.sourceAddress.getAddress());
 			buffer.put(this.destinationAddress.getAddress());
 		}
-
+		
 		@Override
 		public String toString()
 		{
