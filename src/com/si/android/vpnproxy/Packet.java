@@ -173,7 +173,7 @@ public class Packet
 		updateIP4Checksum();
 	}
 	/**
-	 * FATTA DA MARINAAAAAAAAAaa
+	 * 
 	 * @param buffer
 	 * @param flags
 	 * @param sequenceNum
@@ -188,8 +188,6 @@ public class Packet
 		fillHeader(buffer);
 
 		backingBuffer = buffer;
-		///Log.d("paket P","backingbuffer: " + new String(backingBuffer.array()));
-
 		
 		tcpHeader.flags = flags;
 		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
@@ -209,45 +207,34 @@ public class Packet
 		tcpHeader.dataOffsetAndReserved = dataOffset;
 		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
 		
-		
-		
-		
-		
 		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
 		backingBuffer.putShort(2, (short) ip4TotalLength);
 		ip4Header.totalLength = ip4TotalLength;
 		
 		//backingBuffer.putShort(2, (short) 0);
-
 		
-		
+		//Adding payload at the end of pkt
 		int pos = buffer.position();
-		backingBuffer = (ByteBuffer) backingBuffer.position(40);//(TCP_HEADER_SIZE + this.ip4Header.headerLength);
-		//Log.d("paket P","IHL: " + ip4Header.IHL);
+		backingBuffer = (ByteBuffer) backingBuffer.position(TCP_HEADER_SIZE + this.ip4Header.headerLength);
 
 		payload.limit(payloadSize);
 		payload.position(0);
 		backingBuffer.put(payload.array(),0,payloadSize);
 		backingBuffer.position(pos);
 		
-
-		Log.e("paket P","PKT DA PKT:1 " + backingBuffer.array().length +"  "+ payloadSize);
-		
-		Log.d("paket P","PKT DA PKT: 1(cacca) " + new String(backingBuffer.array())+ "\n" + (new String(payload.array())).substring(0, payloadSize-1));
-		
 		updateTCPChecksum(payloadSize);
 		
 		updateIP4Checksum();
 		
 		
-		byte[] appBuffer=payload.array();
-		byte[] appBuffer1=backingBuffer.array();
-		StringBuilder appString= new StringBuilder();
-		for (int i=0; i<payloadSize;i++){
-			boolean appByte= ((byte) appBuffer[i])== ((byte)appBuffer1[40+i]);
-			appString.append(appByte);	
-		}
-		Log.e("Check Byte",appString.toString());
+//		byte[] appBuffer=payload.array();
+//		byte[] appBuffer1=backingBuffer.array();
+//		StringBuilder appString= new StringBuilder();
+//		for (int i=0; i<payloadSize;i++){
+//			boolean appByte= ((byte) appBuffer[i])== ((byte)appBuffer1[40+i]);
+//			appString.append(appByte);	
+//		}
+//		Log.e("Check Byte",appString.toString());
 
 	}
 	

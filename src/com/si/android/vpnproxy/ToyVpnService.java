@@ -98,7 +98,6 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
-			
 			Packet appPacket = new Packet(packet);
 			int threadNum = 0;
 			/****/

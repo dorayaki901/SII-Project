@@ -152,147 +152,63 @@ public class ThreadLog implements Runnable {
 	 * brief Send and receive messages through an TCP connection
 	 */
 	private void TCPSocket() {
-		Socket ssTCP = null;
-		char[] responce = new char[ToyVpnService.MAX_PACKET_LENGTH];
-		DataOutputStream outToServer = null;
-		BufferedReader inFromServer = null;
-		Packet pktReply = null;
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
-		
-		//TCPManager = new TCPManager(pktInfo);
-		
+		byte[] payload = null;
+		TCPManager TCP = new TCPManager(this.pktInfo, this.sentoToAppQueue,this.vpn);
+
 		try {
 
 			do{
-			if(pktInfo == null){
-				Log.i(TAG,"PKT NULL");
-				//continue;
-				return;
-			}
-			//Extract payload
-			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
-			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-
-			//Log.i("ThreadLog", i +"packet" + pktInfo.toString());
-
-			/// checkout the type of pkt: SYN-SYN/ACK-ACK-FIN 
-			//SYN pkt
-			if (pktInfo.tcpHeader.isSYN() && !pktInfo.tcpHeader.isACK()){
-				Log.d("ThreadLog",pktInfo.tcpHeader.sourcePort+" - "+"SYN pkt received");
-				pktReply = SYN_ACKresponse(pktInfo);
-				// Send SYN-ACK response
-				ByteBuffer bufferFromNetwork = pktReply.backingBuffer;
-				bufferFromNetwork.flip();
-
-				sentoToAppQueue.add(bufferFromNetwork);
-			}
-
-			//ACK pkt
-			if (pktInfo.tcpHeader.isACK() && !pktInfo.tcpHeader.isSYN()){
-				Log.i("ThreadLog",pktInfo.tcpHeader.sourcePort+" - "+"ACK pkt received " + new String(payload));
-				//pktReply = SYN_ACKresponse(pktInfo);
-			}
-
-
-			//if the msg have some payload, resend it to the outside Server
-			if(!(new String(payload)).equals("") && payload!= null){
-				//Log.i(TAG,i + " pkt:  " + new String(payload));
-
-				if(ssTCP==null){ // only the fist time. If I have already a connection, send directly the payload
-					Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+" NEW CONNECTION TO: " + pktInfo.ip4Header.destinationAddress + ":"+ pktInfo.tcpHeader.destinationPort);
-
-					//Open a connection with the outside
-					ssTCP = SocketChannel.open().socket();
-					//protect the VPN
-					if(!vpn.protect(ssTCP)){
-						Log.i("ThreadLog", "Error protect VPN");
-					}
-					ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
-					//ssTCP = new Socket(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort);
-					ssTCP.setReuseAddress(true);
-					outToServer = new DataOutputStream(ssTCP.getOutputStream());
-					inFromServer = new BufferedReader(new InputStreamReader(ssTCP.getInputStream()));
-
+				if(this.pktInfo == null){
+					Log.e(TAG,"error pkt null");
+					//continue;
+					return;
 				}
-				//send request
-				Log.i("ThreadLog",pktInfo.tcpHeader.sourcePort+" - "+"Payload sent to server " +  (new String(payload)).isEmpty());
-
-				outToServer.write(payload,0,payload.length);
-
-				//receive the response
-				//char[] buff = new char[6000];
-
-
-				int n = 0;
-				//n = inFromServer.read(buff, 0, buff.length);
-				Log.i("ThreadLog",pktInfo.tcpHeader.sourcePort+" - "+"Pre read line");
-				//					String line = inFromServer.readLine();
-				//					Log.i("ThreadLog","Post read line");
-				//					responce = "";
-				//					while(line!=null && !line.equals("")){
-				//						responce += line;
-				//						//Log.d("ThreadLog","PROGRESS RESPONNCE: "+responce);
-				//						line = inFromServer.readLine();
-				//					}
-
+				//Extract payload
+				payload = new byte[pktInfo.backingBuffer.remaining()];
+				pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
+				
+				//Manager TCP connection and TCP pkt
+				if(!TCP.managePKT(payload))
+					return;
+				
+				/** Read from the pipe for the APP response **/
+				int length = 0;
+				int dimP = 0;
 				int tot = 0;
-				int length = 1;
-				Log.i(TAG, "STO LEGGENDO");
-				//while(length>0){
-				length = inFromServer.read(responce, tot, ToyVpnService.MAX_PACKET_LENGTH-tot);				
-				//	if (length <0){
-				//		Log.i(TAG, "Error reading from socket");
-				//		return;
-				//	}
-				//	Log.i(TAG, "LEN: " + length + "TOT");
-				//	tot += length ;
-				//}		
+				byte[] sizeBuff = new byte[4];
+				//1. Receive the new packet dimension (4 byte length)
+				while(tot<4){
+					length = readPipe.read(sizeBuff,tot,4-tot); // read the length of the pkt
+					if (length <0){
+						Log.i(TAG, "Error reading from pipe");
+						return;
+					}
+					tot += length ;
+				}
 
+				tot = 0;
+				dimP = ByteBuffer.wrap(sizeBuff).getInt();
+				//receive the real pkt
+				while(dimP>tot){
+					length = readPipe.read(receivedPacket,tot,dimP-tot);				
+					if (length <0){
+						Log.i(TAG, "Error reading from pipe");
+						return;
+					}
+					tot += length ;
+				}								
 
+				//Initializing the new pkt
+				ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
+				packetBuffer.put(receivedPacket, 0, tot);
+				packetBuffer.flip();
+				pktInfo  = new Packet(packetBuffer);
+				//				this.pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
 
-				//responce = new String(buff);
-				Log.d("ThreadLog",pktInfo.tcpHeader.sourcePort+" - "+ tot + " -Responce:  " +" \n" + new String(responce) );
-				sendToApp(new String(responce).getBytes(),length,false);
-
-
-			}
-			//Read from the pipe for the response
-							int length = 0;
-							int dimP = 0;
-							int tot = 0;
-							byte[] sizeBuff = new byte[4];
-							//1. Receive the new packet dimension (4 byte length)
-							while(tot<4){
-								length = readPipe.read(sizeBuff,tot,4-tot); // read the length of the pkt
-								if (length <0){
-									Log.i(TAG, "Error reading from pipe");
-									return;
-								}
-								tot += length ;
-							}
-							
-							tot = 0;
-							dimP = ByteBuffer.wrap(sizeBuff).getInt();
-							//receive the real pkt
-							while(dimP>tot){
-								length = readPipe.read(receivedPacket,tot,dimP-tot);				
-								if (length <0){
-									Log.i(TAG, "Error reading from pipe");
-									return;
-								}
-								tot += length ;
-							}								
-							
-							//Initializing the new pkt
-							ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
-							packetBuffer.put(receivedPacket, 0, tot);
-							packetBuffer.flip();
-							pktInfo  = new Packet(packetBuffer);
-			//				this.pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
-			
-							Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+"Read From Pipe: " + tot + " -- " + new String(packetBuffer.array()));
-
-			//Thread.sleep(200);
+				Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+"Read From Pipe: " + tot + " -- " + new String(packetBuffer.array()));
+				TCP.pktInfo = pktInfo;
+				//Thread.sleep(200);
 
 			}while(true);
 
@@ -300,58 +216,6 @@ public class ThreadLog implements Runnable {
 			e.printStackTrace();
 		}
 
-
-
-	}
-
-	/**
-	 * brief  Built a new Syn_Ack packet responding to the original syn_pkt 
-	 * @param pkt
-	 * @param payload 
-	 * @return
-	 */
-	private Packet SYN_ACKresponse(Packet syn_pkt) {
-		int payloadSize = syn_pkt.backingBuffer.limit() - syn_pkt.backingBuffer.position();
-		byte flags = syn_pkt.tcpHeader.flags;
-
-		flags = BitUtils.setBit(1, 2, flags); // Syn bit
-		flags = BitUtils.setBit(1, 5, flags); // Ack bit
-
-		long sequenceNum = (int) Math.random(); // Random number 
-		long ackNum = syn_pkt.tcpHeader.sequenceNumber + 1; // increment the seq. num.
-
-		//Log.i("ThreadLog", syn_pkt.tcpHeader.flags + ": "+ Integer.toBinaryString(Integer.valueOf(flags)));
-		ByteBuffer buffer = syn_pkt.backingBuffer;
-		buffer.position(0);
-		syn_pkt.updateTCPBuffer(buffer, flags, sequenceNum, ackNum, payloadSize);
-		syn_pkt.updateSourceAndDestination();
-
-		return syn_pkt;
-	}
-	/**
-	 * 
-	 * @param syn_pkt
-	 * @param payload
-	 * @return
-	 */
-	//TODO
-	private Packet FINresponse(Packet syn_pkt) {
-		int payloadSize = syn_pkt.backingBuffer.limit() - syn_pkt.backingBuffer.position();
-		byte flags = syn_pkt.tcpHeader.flags;
-
-		flags = BitUtils.setBit(1, 2, flags); // Syn bit
-		flags = BitUtils.setBit(1, 5, flags); // Ack bit
-
-		long sequenceNum = 1 ;//(int) Math.random(); // Random number 
-		long ackNum = syn_pkt.tcpHeader.sequenceNumber + 1; // increment the seq. num.
-
-		//Log.i("ThreadLog", syn_pkt.tcpHeader.flags + ": "+ Integer.toBinaryString(Integer.valueOf(flags)));
-		ByteBuffer buffer = syn_pkt.backingBuffer;
-		buffer.position(0);
-		syn_pkt.updateTCPBuffer(buffer, flags, sequenceNum, ackNum, payloadSize);
-		syn_pkt.updateSourceAndDestination();
-
-		return syn_pkt;
 	}
 
 	/** 
@@ -447,29 +311,6 @@ public class ThreadLog implements Runnable {
 
 	}
 
-	void printGzipBody(byte[] bytes) throws IOException{
-		String app = new String(bytes);
-		String app2 = null;
-		int pos = app.lastIndexOf("\n");
-		app2 = app.substring(pos,app.length()-1);
-		Log.i("sendToApp",pos + " " + app);
-		Log.i("sendToApp",app2);
-		byte[] B2 = null;
-		byte[] fileBytes = new byte[bytes.length - pos];
-		for(int i =0;i<bytes.length - pos;i++)
-			fileBytes[i] = bytes[i+pos];
-		Log.i("sendToApp",new String(fileBytes));
-		GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(fileBytes));
-		BufferedReader bf = new BufferedReader(new InputStreamReader(gis, "UTF-8"));
-		String outStr = "";
-		String line;
-		while ((line=bf.readLine())!=null) {
-			outStr += line;
-		}
-		Log.i("sendToApp", outStr);
-
-	}
-
-
+	
 
 }
