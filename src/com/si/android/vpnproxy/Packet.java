@@ -182,30 +182,25 @@ public class Packet
 	 */
 	public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize, ByteBuffer payload)
 	{
-		;
+		
 		buffer.position(0);
 		payload.position(0);
 		fillHeader(buffer);
-		Log.d("paket P","payload: " + payloadSize);
 
 		backingBuffer = buffer;
-		Log.d("paket P","backingbuffer: " + new String(backingBuffer.array()));
+		///Log.d("paket P","backingbuffer: " + new String(backingBuffer.array()));
 
-		int pos = buffer.position();
-		backingBuffer.position(TCP_HEADER_SIZE + IP4_HEADER_SIZE);
-		Log.d("paket P","IHL: " + ip4Header.IHL);
-
-
-		backingBuffer.put(payload.array(),0,payloadSize);
-		backingBuffer.position(pos);
 		
-		Log.d("paket P","PKT DA PKT: " + new String(backingBuffer.array())+ new String(payload.array()));
 		tcpHeader.flags = flags;
 		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
-
+		
+		Log.d("paket P","PKT DA PKT:  (0)" + new String(backingBuffer.array()));
+		
 		tcpHeader.sequenceNumber = sequenceNum;
 		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) sequenceNum);
-
+		
+		
+		
 		tcpHeader.acknowledgementNumber = ackNum;
 		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) ackNum);
 
@@ -213,16 +208,47 @@ public class Packet
 		byte dataOffset = (byte) (TCP_HEADER_SIZE << 2);
 		tcpHeader.dataOffsetAndReserved = dataOffset;
 		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
-
-		updateTCPChecksum(payloadSize);
-
+		
+		
+		
+		
+		
 		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
 		backingBuffer.putShort(2, (short) ip4TotalLength);
 		ip4Header.totalLength = ip4TotalLength;
 		
 		//backingBuffer.putShort(2, (short) 0);
 
+		
+		
+		int pos = buffer.position();
+		backingBuffer = (ByteBuffer) backingBuffer.position(40);//(TCP_HEADER_SIZE + this.ip4Header.headerLength);
+		//Log.d("paket P","IHL: " + ip4Header.IHL);
+
+		payload.limit(payloadSize);
+		payload.position(0);
+		backingBuffer.put(payload.array(),0,payloadSize);
+		backingBuffer.position(pos);
+		
+
+		Log.e("paket P","PKT DA PKT:1 " + backingBuffer.array().length +"  "+ payloadSize);
+		
+		Log.d("paket P","PKT DA PKT: 1(cacca) " + new String(backingBuffer.array())+ "\n" + (new String(payload.array())).substring(0, payloadSize-1));
+		
+		updateTCPChecksum(payloadSize);
+		
 		updateIP4Checksum();
+		
+		
+		byte[] appBuffer=payload.array();
+		byte[] appBuffer1=backingBuffer.array();
+		StringBuilder appString= new StringBuilder();
+		for (int i=0; i<payloadSize;i++){
+			boolean appByte= ((byte) appBuffer[i])== ((byte)appBuffer1[40+i]);
+			appString.append(appByte);	
+		}
+		Log.e("Check Byte",appString.toString());
+
 	}
 	
 	/**

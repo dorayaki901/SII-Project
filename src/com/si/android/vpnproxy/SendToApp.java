@@ -34,7 +34,7 @@ public class SendToApp implements Runnable{
 						Log.i(TAG,"Write in out: "+ buffToApp.array().length + " " + new String(buffToApp.array()) );
 						Log.i(TAG,"Write in out NO HEADeR: "+ (new String(buffToApp.array())).substring(40) );
 						Log.i(TAG,"Write in out NO HEADeR: "+ (new String(buffToApp.array())).substring(40).length());
-						Log.i(TAG,"Write in out:PKT" + (new Packet(buffToApp)).toString());
+						//Log.i(TAG,"Write in out:PKT" + (new Packet(buffToApp)).toString());
 
 				}
 				Thread.currentThread();

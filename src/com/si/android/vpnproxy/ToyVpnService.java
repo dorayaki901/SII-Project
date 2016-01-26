@@ -27,6 +27,7 @@ import android.widget.Toast;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.ByteBuffer;
@@ -34,11 +35,11 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ToyVpnService extends VpnService implements Handler.Callback, Runnable {
-	private static final String TAG = "ToyVpnService";
+	private static final String TAG = "VpnService";
 
 	private String mServerAddress;
 	private int mServerPort = 1050;
-	public static final int MAX_PACKET_LENGTH = 1600;
+	public static final int MAX_PACKET_LENGTH = 64000;
 	private PendingIntent mConfigureIntent;
 	private HashMap<IdentifierKeyThread, InfoThread> mThreadMap;
 	private Thread mThread;
@@ -76,11 +77,17 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	@Override
 	public synchronized void run() {
 		try {
+			//TODO timer 
+			int timer = 0;
+			int length = 0;
+			boolean idle;
+			
+			IdentifierKeyThread key = new IdentifierKeyThread();
+			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
 			//a. Configure the TUN and get the interface.
 			ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue = new ConcurrentLinkedQueue<ByteBuffer>();
-			
+
 			mInterface = builder.setSession("MyVPNService")
-					.setMtu(3000)
 					.addAddress("10.0.0.2",32)     	
 					.addRoute("0.0.0.0",0)
 					/*.addDnsServer("8.8.8.8")*/.establish();
@@ -91,119 +98,81 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
-			/****/
 			
+			Packet appPacket = new Packet(packet);
+			int threadNum = 0;
+			/****/
 			SendToApp writeThread = new SendToApp(out,sentoToAppQueue);
 			Thread sendToApp = new Thread(writeThread);
 			sendToApp.start();
 			/****/
-			IdentifierKeyThread key = new IdentifierKeyThread();
-			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
-			int timer = 0;
-			int length = 0;
-			boolean idle;
-			
-			int i = 0;
 			while (true) {
 				//idle = true;
-
 				// Read the outgoing packet from the input stream.
 				length = in.read(packet.array());      
 				if (length > 0) {
-					// check if a thread is already manage the connection 
+					
+					appPacket = new Packet(packet);
 
-					Packet appPacket = new Packet(packet);
-
-					if(appPacket == null){
-						packet.clear();
-						continue;
-					}
 					if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
-						
 						packet.clear();
-						
 						continue;
 					}
-					
-					//pezzo aggiunto con il count
-//					if (count>2)
-//						continue;
-					
-					
-					//					ByteBuffer packetBuffer = ByteBuffer.allocate(length);
-					//					packetBuffer.put(packet.array(), 0, length);
-					//					packetBuffer.position(0);
-					//					Packet appPacket = new Packet(packetBuffer);
+					// Check if a thread is already manage the connection 
+					key.set(appPacket);
+					InfoThread info = mThreadMap.get(key);
 
-//						Log.i(TAG,"PKT CATTURATO!");
-//					    Log.i(TAG,"PACKET ARRIVED: SPort-"+appPacket.tcpHeader.sourcePort+" DPort-"+appPacket.tcpHeader.destinationPort+" Sequence-"
-//					    		+appPacket.tcpHeader.sequenceNumber+" Type-"+appPacket.tcpHeader.flags);
-					 //   Log.i("IdentifierKeyThread","PACKET ARRIVED: "+appPacket.tcpHeader.toString());
-					
-						//						Log.i(TAG,"Pre-Existing Connection to " + appPacket.ip4Header.destinationAddress);
-//						key.set(appPacket);
-//						InfoThread info = mThreadMap.get(key);
-						
-//						if (info != null){ // Thread is mapped
-//								//Log.i("IdentifierKeyThread","DESTINAZIONE GIA MEMORIZZATA");
-//							if(info.mThread.isAlive()){
-//								//	Log.i(TAG,"THREAD ANCORA VIVO");
-//								//Log.i(TAG, "Write Pipe:" + length+": " + appPacket.toString());
-//								//	try{//TODO devo considerare il fatto che il thread mi può morire tra i due momenti
-//								//Es per scadenza timeout
-//							
-////								ByteBuffer b = ByteBuffer.allocate(4);
-////								b.putInt(length);
-////								b.position(0);
-////								Log.i(TAG,"INVIO PKT SU PIPE: "+ length + b.getInt());
-////								info.mPipeOutputStream.write(b.array(),0,4);
-////								info.mPipeOutputStream.flush();
-////								info.mPipeOutputStream.write(packet.array(),0,length);
-////								info.mPipeOutputStream.flush();
-//
-//								//	} catch (IOException e) {
-//								//		e.printStackTrace();
-//								//		mThreadMap.remove(info);
-//								//	}
-//								continue;
-//							}
-//							else {
-//								//Log.i(TAG,"THREAD MORTO");
-//								mThreadMap.remove(info);
-//							}
-//
-//						}
-//					
+					if (info != null){ // Thread is mapped
+						if(info.mThread.isAlive()){
+							Log.i(TAG,"Manager thread already exist");
+							try{
+								ByteBuffer b = ByteBuffer.allocate(4);
+								b.putInt(length);
+								b.position(0);
+								//Log.i(TAG,"writing app packet on Pipe: "+ length + b.getInt());
+								//First, write the pkt len, then the real pkt
+								info.mPipeOutputStream.write(b.array(),0,4);
+								info.mPipeOutputStream.flush();
+								info.mPipeOutputStream.write(packet.array(),0,length);
+								info.mPipeOutputStream.flush();
+
+							} catch (IOException e) {
+								e.printStackTrace();
+								mThreadMap.remove(info);
+							}
+							continue;
+						}
+						else {
+							Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
+							mThreadMap.remove(info);
+						}
+
+					}
+
 					// New Connection
-//					Log.i("IdentifierKeyThread","CREAZIONE NUOVO THREAD");
-					ThreadLog newThread = new ThreadLog(out, packet, length, this,i,sentoToAppQueue);
+					//Log.i(TAG,"Creation new manager thread");
+					ThreadLog newThread = new ThreadLog(out, packet, length, this,threadNum,sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-//					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
-//					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
-//
-//					InfoThread infoThread=new InfoThread(logPacket, writePipe);
-//
-//					newThread.setPipe(readPipe);
-//
-//					mThreadMap.put(key, infoThread); 
+					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
+					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
+
+					InfoThread infoThread=new InfoThread(logPacket, writePipe);
+
+					newThread.setPipe(readPipe);
+
+					mThreadMap.put(key, infoThread); 
 
 					logPacket.start();
 
-					i++;
+					threadNum++;
 
 					//idle = false;
 
 					packet.clear();
-					
+
 				}
-				 Thread.sleep(1000);
-				
-				// If we are idle or waiting for the network, sleep for a
-				// fraction of time to avoid busy looping.
-				// if (idle) {
-				//	   Thread.sleep(100);
-				//     }   
+				Thread.sleep(100);
 			}
 		} catch (Exception e) {
 			// Catch any exception

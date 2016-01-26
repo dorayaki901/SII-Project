@@ -29,7 +29,6 @@ public class IdentifierKeyThread {
 
 	@Override
 	public boolean equals(Object o) {
-		Log.i(TAG,"Equals ");
 		IdentifierKeyThread app = (IdentifierKeyThread) o;	
 
 		if (app.destinationIP.getHostAddress().equals(destinationIP.getHostAddress()) 
@@ -44,7 +43,6 @@ public class IdentifierKeyThread {
 
 	@Override
 	public int hashCode() {
-		Log.i(TAG,"hashCode: "+hashCode+"  Porta:"+sourcePort);
 		return hashCode;
 	}
 
