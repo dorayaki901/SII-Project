@@ -1,27 +1,11 @@
 package com.si.android.vpnproxy;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.DataOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PipedInputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.UnknownHostException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.channels.DatagramChannel;
-import java.nio.channels.FileChannel;
-import java.nio.channels.SocketChannel;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.zip.GZIPInputStream;
-
-import com.si.android.vpnproxy.Packet.TCPHeader;
-
 import android.net.VpnService;
 import android.util.Log;
 
@@ -40,12 +24,11 @@ public class ThreadLog implements Runnable {
 		this.vpn = vpn;
 		this.out = out;
 		this.sentoToAppQueue = sentoToAppQueue;
+		
 		this.packetBuffer = ByteBuffer.allocate(lengthRequest);
-
 		this.packetBuffer.put( pktFromApp.array(), 0, lengthRequest);
 		this.packetBuffer.position(0);
 		this.pktInfo = new Packet(packetBuffer);
-
 	}
 
 	public void setPipe(PipedInputStream readPipe) {
@@ -58,98 +41,63 @@ public class ThreadLog implements Runnable {
 	@Override
 	public void run() {
 
-		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
-			Log.i(TAG, "Starting new Thread for connection at:" + pktInfo.ip4Header.destinationAddress.getHostAddress() + ":" + pktInfo.tcpHeader.destinationPort);
-			TCPSocket();
-		}
+		//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
+		//			Log.i(TAG, "Starting new Thread for connection at:" + pktInfo.ip4Header.destinationAddress.getHostAddress() + ":" + pktInfo.tcpHeader.destinationPort);
+		//			TCPSocket();
+		//		}
 
-		//				if(pktInfo.isUDP()){
-		//					UDPSocket();
-		//					return;
-		//				}
-		//				if(pktInfo.isTCP()){
-		//					TCPSocket();
-		//					return;
-		//				}
+		//						if(pktInfo.isUDP()){
+		//							try {
+		//								UDPSocket();
+		//							} catch (IOException e) {
+		//								// TODO Auto-generated catch block
+		//								e.printStackTrace();
+		//							}
+		//							return;
+		//						}
+
+		if(pktInfo.isTCP()){
+			TCPSocket();
+			return;
+		}
 
 	}
 
 	/**
 	 * Send and receive messages through an UDP connection
+	 * @throws IOException 
 	 */
-	private void UDPSocket() {
-		DatagramChannel channel = null;
-		DatagramSocket ssUDP = null;
-		byte[] receiveData=new byte[1500];
+	private void UDPSocket() throws IOException {
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
-
-		while(true){
-			// Send UDP message from APP to the OUTSIDE
-			try {
-
-				//QUI MI DA NEGATIVE ARRAY SIZE
-				byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
-				//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
-				pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
-				pktInfo.backingBuffer.get(payload, 0, lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE);
-
-				//				Log.i("ThreadLog", "UDP:"+ new String(payload)+"\nSIZE:"+payload.length);
-				Log.i("ThreadLog - UDP", pktInfo.ip4Header.destinationAddress.getHostAddress());
+		UDPManager UDP = new UDPManager(this.pktInfo, sentoToAppQueue, vpn);
 
 
-				if (channel==null){
-					channel = DatagramChannel.open();
-					ssUDP = channel.socket();
+		//QUI MI DA NEGATIVE ARRAY SIZE
+		byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
+		//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
+		pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
+		pktInfo.backingBuffer.get(payload, 0, lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE);
 
-					if(!vpn.protect(ssUDP)){
-						Log.i("ThreadLog", "Error protect VPN");
-					}
+		UDP.managePKT(payload);
 
-					ssUDP.setReuseAddress(true);
-					ssUDP.setBroadcast(true);
-					ssUDP.bind(null);
-				}
+		//TODO !!!!!!!!SECONDO ME NON NECESSARIO PER UDP!!!!!!!!!!!!-->Se usato aggiungere ciclo
+		//Wait for the Pipe response
+		//			Log.i("ThreadLog", "post send to app");
+		//			try {
+		//				lengthRequest=readPipe.read(receivedPacket);
+		//				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+		//
+		//				Log.i("ThreadLog - Lunghezza", lengthRequest+"");
+		//			} catch (IOException e) {
+		//				e.printStackTrace();
+		//			}	
 
-				DatagramPacket sendPacket = new DatagramPacket(payload,payload.length, pktInfo.ip4Header.destinationAddress,pktInfo.udpHeader.destinationPort);
-
-				ssUDP.send(sendPacket);
-
-			} catch (Exception e) {e.printStackTrace();}
-
-			// Receive the responses from OUTSIDE and send it to APP
-			DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-
-			try {
-				ssUDP.receive(receivePacket);
-			} catch (IOException e) {
-				e.printStackTrace(); 
-				Log.i("ThreadLog", "ERROR");
-			}
-
-			//Log.i("ThreadLog", "responce:" + (new String(receivePacket.getData())).substring(0, receivePacket.getLength()));		
-			//		ByteBuffer appSendByte=ByteBuffer.allocate(receivePacket.getLength());
-			//		appSendByte.put(receivePacket.getData(), 0, receivePacket.getLength());		
-			//		Log.i("ThreadLog", "responce:" +appSendByte.array().length+"  /   "+receivePacket.getLength());
-
-			sendToApp(receivePacket.getData(),receivePacket.getLength(),true);	
-
-			Log.i("ThreadLog", "post send to app");
-			try {
-				lengthRequest=readPipe.read(receivedPacket);
-				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
-
-				Log.i("ThreadLog - Lunghezza", lengthRequest+"");
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}	
-		}
 	}
 
 
 
 	/**
-	 * brief Send and receive messages through an TCP connection
+	 * Send and receive messages through an TCP connection
 	 */
 	private void TCPSocket() {
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
@@ -158,59 +106,59 @@ public class ThreadLog implements Runnable {
 
 		try {
 
-			do{
-				if(this.pktInfo == null){
-					Log.e(TAG,"error pkt null");
-					//continue;
-					return;
-				}
-				//Extract payload
-				payload = new byte[pktInfo.backingBuffer.remaining()];
-				pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-				
-				//Manager TCP connection and TCP pkt
-				if(!TCP.managePKT(payload))
-					return;
-				
-				/** Read from the pipe for the APP response **/
-				int length = 0;
-				int dimP = 0;
-				int tot = 0;
-				byte[] sizeBuff = new byte[4];
-				//1. Receive the new packet dimension (4 byte length)
-				while(tot<4){
-					length = readPipe.read(sizeBuff,tot,4-tot); // read the length of the pkt
-					if (length <0){
-						Log.i(TAG, "Error reading from pipe");
-						return;
-					}
-					tot += length ;
-				}
+			//			do{
+			if(this.pktInfo == null){
+				Log.e(TAG,"error pkt null");
+				//continue;
+				return;
+			}
+			//Extract payload
+			payload = new byte[pktInfo.backingBuffer.remaining()];
+			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
 
-				tot = 0;
-				dimP = ByteBuffer.wrap(sizeBuff).getInt();
-				//receive the real pkt
-				while(dimP>tot){
-					length = readPipe.read(receivedPacket,tot,dimP-tot);				
-					if (length <0){
-						Log.i(TAG, "Error reading from pipe");
-						return;
-					}
-					tot += length ;
-				}								
+			//Manager TCP connection and TCP pkt
+			if(!TCP.managePKT(payload))
+				return;
 
-				//Initializing the new pkt
-				ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
-				packetBuffer.put(receivedPacket, 0, tot);
-				packetBuffer.flip();
-				pktInfo  = new Packet(packetBuffer);
-				//				this.pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
-
-				Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+"Read From Pipe: " + tot + " -- " + new String(packetBuffer.array()));
-				TCP.pktInfo = pktInfo;
-				//Thread.sleep(200);
-
-			}while(true);
+			//				/** Read from the pipe for the APP response **/
+			//				int length = 0;
+			//				int dimP = 0;
+			//				int tot = 0;
+			//				byte[] sizeBuff = new byte[4];
+			//				//1. Receive the new packet dimension (4 byte length)
+			//				while(tot<4){
+			//					length = readPipe.read(sizeBuff,tot,4-tot); // read the length of the pkt
+			//					if (length <0){
+			//						Log.i(TAG, "Error reading from pipe");
+			//						return;
+			//					}
+			//					tot += length ;
+			//				}
+			//
+			//				tot = 0;
+			//				dimP = ByteBuffer.wrap(sizeBuff).getInt();
+			//				//receive the real pkt
+			//				while(dimP>tot){
+			//					length = readPipe.read(receivedPacket,tot,dimP-tot);				
+			//					if (length <0){
+			//						Log.i(TAG, "Error reading from pipe");
+			//						return;
+			//					}
+			//					tot += length ;
+			//				}								
+			//
+			//				//Initializing the new pkt
+			//				ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
+			//				packetBuffer.put(receivedPacket, 0, tot);
+			//				packetBuffer.flip();
+			//				pktInfo  = new Packet(packetBuffer);
+			//				//				this.pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
+			//
+			//				Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+"Read From Pipe: " + tot + " -- " + new String(packetBuffer.array()));
+			//				TCP.pktInfo = pktInfo;
+			//				//Thread.sleep(200);
+			//
+			//			}while(true);
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -218,99 +166,6 @@ public class ThreadLog implements Runnable {
 
 	}
 
-	/** 
-	 * Send to app the incoming packet
-	 * @param receiveData 
-	 * @param length
-	 * @param protocol
-	 */
-	private void sendToApp(byte[] receiveData,int length, boolean protocol)  {
-		//String s="<html><head><title>Benvenuto</title></head><body><div align=\"center\"><font size=\"6\">Hello World!</font></div></body></html>";
-		//String appoggio="HTTP/1.1 500 Internal Server Error\r\nContent-Length: 9051\r\nContent-Type: application/soap+xml; charset=utf-8\r\nServer: Microsoft-HTTPAPI/2.0\r\n\r\n<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:a=\"http://www.w3.org/2005/08/addressing\"><s:Header><a:Action s:mustUnderstand=\"1\">http://schemas.microsoft.com/net/2005/12/windowscommunicationfoundation/dispatcher/fault</a:Action></s:Header><s:Body><s:Fault><s:Code><s:Value>s:Receiver</s:Value><s:Subcode><s:Value xmlns:a=\"http://schemas.microsoft.com/net/2005/12/windowscommunicationfoundation/dispatcher\">a:InternalServiceFault</s:Value></s:Subcode></s:Code><s:Reason><s:Text xml:lang=\"it-IT\">Unable to obtain service fault fromexception: System.ServiceModel.Security.SecurityAccessDeniedException: Provided credentials are not valid.&#xD;   at Grep.ManagementPlatform.Services.Business.Impl.ThrowOnFailureAuthenticationProvider.Throw() in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Business\\Impl\\ThrowOnFailureAuthenticationProvider.cs:line 42&#xD;   at Grep.ManagementPlatform.Services.Business.Impl.ThrowOnFailureAuthenticationProvider.ValidateCustomerCredentials(ServiceCredentialsDto credentials) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Business\\Impl\\ThrowOnFailureAuthenticationProvider.cs:line 30&#xD;   at Grep.ManagementPlatform.Services.Impl.ComponentServiceImpl.AuthenticateCustomerAccount(ServiceCredentialsDto credentials) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Impl\\ComponentServiceImpl.cs:line 104&#xD;   at Castle.Proxies.Invocations.IComponentService_AuthenticateCustomerAccount.InvokeMethodOnTarget()&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Data.Impl.NHibernate.Integration.NHTransactionIntegration.NHibernateTransactionInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Data.Impl.NHibernate\\Integration\\NHTransactionIntegration\\NHibernateTransactionInterceptor.cs:line 62&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Castle.Facilities.AutoTx.TransactionInterceptor.SynchronizedCase(IInvocation invocation, ITransaction transaction) in d:\\BuildAgent-03\\work\\9844bdf039249947\\src\\Castle.Facilities.AutoTx\\TransactionInterceptor.cs:line 179&#xD;   at Castle.Facilities.AutoTx.TransactionInterceptor.Castle.DynamicProxy.IInterceptor.Intercept(IInvocation invocation) in d:\\BuildAgent-03\\work\\9844bdf039249947\\src\\Castle.Facilities.AutoTx\\TransactionInterceptor.cs:line 119&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Commons.Integration.Interceptors.ServiceLoggingInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\Integration\\Interceptors\\ServiceLoggingInterceptor.cs:line 33&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Commons.Integration.Interceptors.ServiceExceptionHandlingInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\Integration\\Interceptors\\ServiceExceptionHandlingInterceptor.cs:line 33</s:Text></s:Reason><s:Detail><ExceptionDetail xmlns=\"http://schemas.datacontract.org/2004/07/System.ServiceModel\" xmlns:i=\"http://www.w3.org/2001/XMLSchema-instance\"><HelpLink i:nil=\"true\"/><InnerException><HelpLink>groups.google.com/group/castle-project-users</HelpLink><InnerException i:nil=\"true\"/><Message>No component for supporting the service Grep.ManagementPlatform.Commons.ExceptionManagement.ServiceFaultAssemblers.DefaultServiceFaultAssembler was found</Message><StackTrace>   at Castle.MicroKernel.DefaultKernel.Castle.MicroKernel.IKernelInternal.Resolve(Type service, IDictionary arguments, IReleasePolicy policy)&#xD;   at Castle.Facilities.TypedFactory.TypedFactoryComponentResolver.Resolve(IKernelInternal kernel, IReleasePolicy scope)&#xD;   at Castle.Facilities.TypedFactory.Internal.TypedFactoryInterceptor.Resolve(IInvocation invocation)&#xD;   at Castle.Facilities.TypedFactory.Internal.TypedFactoryInterceptor.Intercept(IInvocation invocation)&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Castle.Proxies.IServiceFaultAssemblerFactoryProxy.GetServiceFaultAssembler(Exception e)&#xD;   at Grep.ManagementPlatform.Commons.ExceptionManagement.ServiceFaultAssemblerHelper.AssembleFault(IServiceFaultAssemblerFactory factory, Exception e) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\ExceptionManagement\\ServiceFaultAssemblerHelper.cs:line 14</StackTrace><Type>Castle.MicroKernel.ComponentNotFoundException</Type></InnerException><Message>Unable to obtain service fault from exception: System.ServiceModel.Security.SecurityAccessDeniedException: Provided credentials are not valid.&#xD;   at Grep.ManagementPlatform.Services.Business.Impl.ThrowOnFailureAuthenticationProvider.Throw() in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Business\\Impl\\ThrowOnFailureAuthenticationProvider.cs:line 42&#xD;   at Grep.ManagementPlatform.Services.Business.Impl.ThrowOnFailureAuthenticationProvider.ValidateCustomerCredentials(ServiceCredentialsDto credentials) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Business\\Impl\\ThrowOnFailureAuthenticationProvider.cs:line 30&#xD;   at Grep.ManagementPlatform.Services.Impl.ComponentServiceImpl.AuthenticateCustomerAccount(ServiceCredentialsDto credentials) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Services\\Impl\\ComponentServiceImpl.cs:line 104&#xD;   at Castle.Proxies.Invocations.IComponentService_AuthenticateCustomerAccount.InvokeMethodOnTarget()&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Data.Impl.NHibernate.Integration.NHTransactionIntegration.NHibernateTransactionInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Data.Impl.NHibernate\\Integration\\NHTransactionIntegration\\NHibernateTransactionInterceptor.cs:line 62&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Castle.Facilities.AutoTx.TransactionInterceptor.SynchronizedCase(IInvocation invocation, ITransaction transaction) in d:\\BuildAgent-03\\work\\9844bdf039249947\\src\\Castle.Facilities.AutoTx\\TransactionInterceptor.cs:line 179&#xD;   at Castle.Facilities.AutoTx.TransactionInterceptor.Castle.DynamicProxy.IInterceptor.Intercept(IInvocation invocation) in d:\\BuildAgent-03\\work\\9844bdf039249947\\src\\Castle.Facilities.AutoTx\\TransactionInterceptor.cs:line 119&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Commons.Integration.Interceptors.ServiceLoggingInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\Integration\\Interceptors\\ServiceLoggingInterceptor.cs:line 33&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Grep.ManagementPlatform.Commons.Integration.Interceptors.ServiceExceptionHandlingInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\Integration\\Interceptors\\ServiceExceptionHandlingInterceptor.cs:line 33</Message><StackTrace>   at Grep.ManagementPlatform.Commons.ExceptionManagement.ServiceFaultAssemblerHelper.AssembleFault(IServiceFaultAssemblerFactory factory, Exception e) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\ExceptionManagement\\ServiceFaultAssemblerHelper.cs:line 23&#xD;   at Grep.ManagementPlatform.Commons.Integration.Interceptors.ServiceExceptionHandlingInterceptor.Intercept(IInvocation invocation) in e:\\Work\\Grep\\ManagementPlatform\\src\\Grep.ManagementPlatform\\Grep.ManagementPlatform.Commons\\Integration\\Interceptors\\ServiceExceptionHandlingInterceptor.cs:line 64&#xD;   at Castle.DynamicProxy.AbstractInvocation.Proceed()&#xD;   at Castle.Proxies.IComponentServiceProxy.AuthenticateCustomerAccount(ServiceCredentialsDto credentials)&#xD;   at SyncInvokeAuthenticateCustomerAccount(Object , Object[] , Object[] )&#xD;   at System.ServiceModel.Dispatcher.SyncMethodInvoker.Invoke(Object instance, Object[] inputs, Object[]&amp; outputs)&#xD;   at System.ServiceModel.Dispatcher.DispatchOperationRuntime.InvokeBegin(MessageRpc&amp; rpc)&#xD;   at System.ServiceModel.Dispatcher.ImmutableDispatchRuntime.ProcessMessage5(MessageRpc&amp; rpc)&#xD;   at System.ServiceModel.Dispatcher.ImmutableDispatchRuntime.ProcessMessage31(MessageRpc&amp; rpc)&#xD;   at System.ServiceModel.Dispatcher.MessageRpc.Process(Boolean isOperationContextSet)</StackTrace><Type>System.InvalidOperationException</Type></ExceptionDetail></s:Detail></s:Fault></s:Body></s:Envelope>";
-		String s = "<html><head><title>404 Not Found</title></head><body><h1>ppppppppppppppppppppppppppppppppppppppppppppppppppppppphhhhhhhhhhhhhhhhhhhhhhhhhhNot Foundsddddddddddddddddxxxe</h1><hr></body></html>";
-		//String s = "<html><head><title>404 Not Found</title></head><body><h1>Not Found</h1><p>The requested URL /ciao was not found on this server.</p><hr><address>Apache/2.2.22 (Debian) Server at 160.80.10.11 Port 80</address></body></html>";
 
-		String appoggio = "HTTP/1.1 200 OK\r\nContent-Length: " + s.length() + "\r\nContent-Type: text/html; charset=utf-8\r\nServer: Microsoft-HTTPAPI/2.0\r\n\r\n"+s;
-		receiveData = appoggio.getBytes();
-
-		length = appoggio.length();
-		Log.d("sendToApp", "LENGHT :" + length);
-		Log.d("paket P","payload:" + new String(receiveData));
-		ByteBuffer bufferToSend = null;
-		Packet pktToSend = null;
-		int lengthPacket = length + pktInfo.ip4Header.headerLength;
-		//Log.d("sendToApp", "LENGHT PACK NEW:" + lengthPacket + "ip4Header.headerLength " + pktInfo.ip4Header.headerLength + " pktInfo.backingBuffer.array().length" + pktInfo.backingBuffer.array().length);
-
-		//Log.d("sendToApp", "ORIGINAL:" + pktInfo.toString());
-		//Log.d("sendToApp", "ORIGINAL: len: " + length + new String(pktInfo.backingBuffer.array()));
-
-		lengthPacket += (protocol) ? Packet.UDP_HEADER_SIZE : pktInfo.tcpHeader.headerLength;		
-		//		bufferToSend =  ByteBuffer.allocate(lengthPacket);
-		//
-		//		if (pktInfo.backingBuffer.array().length>lengthPacket)
-		//			bufferToSend.put(pktInfo.backingBuffer.array(),0, lengthPacket);
-		//		else
-		//			bufferToSend.put(pktInfo.backingBuffer.array());// QUI OK
-		//
-		//		try {
-		//			bufferToSend.position(0);
-		//			pktToSend = new Packet(bufferToSend);
-		//		} catch (UnknownHostException e1) {	e1.printStackTrace(); }
-		//
-		//		pktToSend.updateSourceAndDestination();
-		//
-		//		try{
-		//
-		//			if (protocol){
-		//				pktToSend.updateUDPBuffer(receiveData,length);
-		//			}
-		//				pktToSend.updateTCPBuffer(receiveData,length);
-
-		//		}catch (Exception e1) {	e1.printStackTrace(); }
-
-		synchronized(this){
-			try {
-				Log.d("sendToApp", "OLD1:" + pktInfo.toString() + "\n" + new String(pktInfo.backingBuffer.array()));
-				pktInfo.backingBuffer.position(0);
-
-				//pktInfo.backingBuffer = a;
-
-				ByteBuffer newBuffer = ByteBuffer.allocateDirect(lengthPacket);
-				Packet prova = new Packet(pktInfo.backingBuffer);
-				pktInfo.backingBuffer.position(0);
-				prova.backingBuffer = null;
-				long acknowledgmentNumber = pktInfo.tcpHeader.sequenceNumber + (pktInfo.backingBuffer.capacity()-40);// +length;
-				long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber;
-				prova.swapSourceAndDestination();
-				//prova.ip4Header.identificationAndFlagsAndFragmentOffset = Integer.parseInt("0111110001111010100000000000000",2);;
-				prova.updateTCPBuffer(newBuffer, (byte) (Packet.TCPHeader.PSH | Packet.TCPHeader.ACK), sequenceNum  , acknowledgmentNumber , length, ByteBuffer.wrap(receiveData));
-				prova.backingBuffer.position(0);
-				//pktToSend.backingBuffer.position(0);
-				//ByteBuffer bufferFromNetwork = pktToSend.backingBuffer;
-				ByteBuffer bufferFromNetwork = prova.backingBuffer;
-
-				sentoToAppQueue.add(bufferFromNetwork);
-				Log.d("sendToApp1", "bking:" + new String(bufferFromNetwork.array()));
-
-				//pktToSend.backingBuffer.position(0);
-				//out.write(pktToSend.backingBuffer.array());
-
-				//out.write(pktToSend.backingBuffer.array(), 0, 300);
-				//out.write(pktToSend.backingBuffer.array(), 300, pktToSend.ip4Header.totalLength - 300);
-
-				//				pktToSend.backingBuffer.position(0);
-				//Log.d("sendToApp1", "NEW:" + pktToSend.toString() + "\n" + new String(pktToSend.backingBuffer.array()));
-				//Log.d("sendToApp1", "OLD:" + pktInfo.toString() + "\n" + new String(pktInfo.backingBuffer.array()));
-
-				//				//printGzipBody(receiveData);
-				//				Log.d("sendToApp","SEND TO APP: " + pktToSend.ip4Header.totalLength + ":" + (new String(pktToSend.backingBuffer.array())).substring(0, 427));
-
-				//				out.write(pktToSend.backingBuffer.array(), 0, pktToSend.backingBuffer.array().length);
-			} catch (Exception e) {e.printStackTrace();}
-		}
-
-	}
-
-	
 
 }

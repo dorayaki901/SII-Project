@@ -31,6 +31,7 @@ public class Packet
 	public static final int IP4_HEADER_SIZE = 20;
 	public static final int TCP_HEADER_SIZE = 20;
 	public static final int UDP_HEADER_SIZE = 8;
+	private static final String TAG = "PacketManager";
 
 	public IP4Header ip4Header;
 	public TCPHeader tcpHeader;
@@ -180,24 +181,28 @@ public class Packet
 	 * @param ackNum
 	 * @param payloadSize
 	 */
-	public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize, ByteBuffer payload)
+	public void updateTCPBuffer(ByteBuffer buffer, byte flags, long sequenceNum, long ackNum, int payloadSize, byte[] payload, int offset)
 	{
 		
 		buffer.position(0);
-		payload.position(0);
+		//payload.position(0);
 		fillHeader(buffer);
 
 		backingBuffer = buffer;
-		
+		Log.e(TAG,"Ack: " + ackNum + "Sqn: " + sequenceNum );
+
+		//Adding payload at the end of pkt
+		int pos = buffer.position();
+		backingBuffer = (ByteBuffer) backingBuffer.position(this.tcpHeader.headerLength + this.ip4Header.headerLength);
+		Log.i(TAG,"offset: " + offset + " payloadSize: " + payloadSize);
+		backingBuffer.put(payload,offset,payloadSize);
+		backingBuffer.position(pos);
+		/////
 		tcpHeader.flags = flags;
 		backingBuffer.put(IP4_HEADER_SIZE + 13, flags);
 		
-		Log.d("paket P","PKT DA PKT:  (0)" + new String(backingBuffer.array()));
-		
 		tcpHeader.sequenceNumber = sequenceNum;
 		backingBuffer.putInt(IP4_HEADER_SIZE + 4, (int) sequenceNum);
-		
-		
 		
 		tcpHeader.acknowledgementNumber = ackNum;
 		backingBuffer.putInt(IP4_HEADER_SIZE + 8, (int) ackNum);
@@ -207,22 +212,13 @@ public class Packet
 		tcpHeader.dataOffsetAndReserved = dataOffset;
 		backingBuffer.put(IP4_HEADER_SIZE + 12, dataOffset);
 		
+		updateTCPChecksum(payloadSize);
+		
 		int ip4TotalLength = IP4_HEADER_SIZE + TCP_HEADER_SIZE + payloadSize;
 		backingBuffer.putShort(2, (short) ip4TotalLength);
 		ip4Header.totalLength = ip4TotalLength;
 		
 		//backingBuffer.putShort(2, (short) 0);
-		
-		//Adding payload at the end of pkt
-		int pos = buffer.position();
-		backingBuffer = (ByteBuffer) backingBuffer.position(TCP_HEADER_SIZE + this.ip4Header.headerLength);
-
-		payload.limit(payloadSize);
-		payload.position(0);
-		backingBuffer.put(payload.array(),0,payloadSize);
-		backingBuffer.position(pos);
-		
-		updateTCPChecksum(payloadSize);
 		
 		updateIP4Checksum();
 		

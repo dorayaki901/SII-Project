@@ -29,7 +29,14 @@ public class SendToApp implements Runnable{
 					//buffToApp.position(0);
 					//while(buffToApp.hasRemaining())
 						//vpnOutput.write(buffToApp);
-						out.write(buffToApp.array());
+					
+					out.write(buffToApp.array());
+//					if(buffToApp.array().length>200){
+//					out.write(buffToApp.array(),0,2000);
+//					out.write(buffToApp.array(), 200, buffToApp.array().length - 200);
+//					}
+						
+						
 					buffToApp.position(0);
 				}
 				Thread.currentThread();
