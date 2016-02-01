@@ -1,4 +1,4 @@
-package com.si.android.vpnproxy;
+package com.example.android.vpnproxy;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -42,10 +42,10 @@ public class UDPManager {
 		
 		// Send UDP message from APP to the OUTSIDE
 		ssUDP.send(sendPacket);
-
+		
 		// Receive the responses from OUTSIDE 
 		DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-
+		
 		try {
 			ssUDP.receive(receivePacket);
 		} catch (IOException e) {
@@ -55,7 +55,7 @@ public class UDPManager {
 		
 		//Send the response to the APP
 		sendToApp(receivePacket.getData(),receivePacket.getLength());	
-
+	
 		return true;
 	}
 	
@@ -112,20 +112,18 @@ public class UDPManager {
 				Log.d("sendToApp", "OLD1:" + pktInfo.toString() + "\n" + new String(pktInfo.backingBuffer.array()));
 				pktInfo.backingBuffer.position(0);
 
-				ByteBuffer newBuffer = ByteBuffer.allocateDirect(lengthPacket);
 				Packet sendToAppPkt = new Packet(pktInfo.backingBuffer);
 				pktInfo.backingBuffer.position(0);
-				sendToAppPkt.backingBuffer = null;
-				
-				int payloadReceive = (pktInfo.backingBuffer.capacity()-pktInfo.ip4Header.headerLength-pktInfo.tcpHeader.headerLength);
-				long acknowledgmentNumber = pktInfo.tcpHeader.sequenceNumber + payloadReceive;// +length;
-				long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber;
-				
-				sendToAppPkt.swapSourceAndDestination();
+				ByteBuffer newBuffer = ByteBuffer.allocateDirect(lengthPacket);
 
-				//TODO DA FARE COME TCP
-				sendToAppPkt.updateTCPBuffer(newBuffer, (byte) (Packet.TCPHeader.PSH | Packet.TCPHeader.ACK), sequenceNum, 
-												acknowledgmentNumber , payloadLength, (payloadResponce),0);
+				if (pktInfo.backingBuffer.array().length>lengthPacket)
+					newBuffer.put(pktInfo.backingBuffer.array(),0, lengthPacket);
+				else
+					newBuffer.put(pktInfo.backingBuffer.array());// QUI OK
+				
+				sendToAppPkt.backingBuffer = newBuffer;	
+				sendToAppPkt.updateSourceAndDestination();
+				sendToAppPkt.updateUDPBuffer(payloadResponce, payloadLength);
 				
 				sendToAppPkt.backingBuffer.position(0);
 				ByteBuffer bufferFromNetwork = sendToAppPkt.backingBuffer;

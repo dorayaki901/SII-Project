@@ -14,7 +14,7 @@
  ** limitations under the License.
  */
 
-package com.si.android.vpnproxy;
+package com.example.android.vpnproxy;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -189,12 +189,12 @@ public class Packet
 		fillHeader(buffer);
 
 		backingBuffer = buffer;
-		Log.e(TAG,"Ack: " + ackNum + "Sqn: " + sequenceNum );
+		//Log.e(TAG,"Ack: " + ackNum + "Sqn: " + sequenceNum );
 
 		//Adding payload at the end of pkt
 		int pos = buffer.position();
 		backingBuffer = (ByteBuffer) backingBuffer.position(this.tcpHeader.headerLength + this.ip4Header.headerLength);
-		Log.i(TAG,"offset: " + offset + " payloadSize: " + payloadSize);
+		//Log.i(TAG,"offset: " + offset + " payloadSize: " + payloadSize);
 		backingBuffer.put(payload,offset,payloadSize);
 		backingBuffer.position(pos);
 		/////
@@ -420,6 +420,11 @@ public class Packet
 
 		public InetAddress sourceAddress;
 		public InetAddress destinationAddress;
+		
+		public short identification;
+		public int fragmentOffset;
+		public boolean moreFragment;
+		
 
 		public int optionsAndPadding;
 
@@ -454,6 +459,7 @@ public class Packet
 
 		private IP4Header(ByteBuffer buffer) throws UnknownHostException
 		{	
+			short flagsAndFragmet;
 			byte versionAndIHL = buffer.get();
 			this.version = (byte) (versionAndIHL >> 4);
 			this.IHL = (byte) (versionAndIHL & 0x0F);
@@ -462,7 +468,15 @@ public class Packet
 			this.typeOfService = BitUtils.getUnsignedByte(buffer.get());
 			this.totalLength = BitUtils.getUnsignedShort(buffer.getShort());
 			
+
 			this.identificationAndFlagsAndFragmentOffset = buffer.getInt();
+			this.identification= (short) (this.identificationAndFlagsAndFragmentOffset >> 16);
+			flagsAndFragmet = (short) this.identificationAndFlagsAndFragmentOffset;
+			this.moreFragment= ( (byte) (((byte) (flagsAndFragmet >> 13)) & 0x01) ==  0x01)  ? true : false;
+			this.fragmentOffset= ((flagsAndFragmet << 3) >>3);
+			
+//			Log.i("Packet-More Fragment", ""+moreFragment);
+//			Log.i("Packet-FragmentOffset", ""+fragmentOffset);
 			
 			this.TTL = BitUtils.getUnsignedByte(buffer.get());
 			this.protocolNum = BitUtils.getUnsignedByte(buffer.get());

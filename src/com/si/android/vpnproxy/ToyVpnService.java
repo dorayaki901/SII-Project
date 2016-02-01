@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.si.android.vpnproxy;
+package com.example.android.vpnproxy;
 
 import android.app.PendingIntent;
 import android.content.Intent;
@@ -81,7 +81,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			int timer = 0;
 			int length = 0;
 			boolean idle;
-			
+
 			IdentifierKeyThread key = new IdentifierKeyThread();
 			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
 			//a. Configure the TUN and get the interface.
@@ -111,57 +111,68 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 				// Read the outgoing packet from the input stream.
 				length = in.read(packet.array());      
 				if (length > 0) {
-					
+
 					appPacket = new Packet(packet);
 
-					if(!appPacket.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
-						packet.clear();
-						continue;
-					}
-//					// Check if a thread is already manage the connection 
-//					key.set(appPacket);
-//					InfoThread info = mThreadMap.get(key);
-//
-//					if (info != null){ // Thread is mapped
-//						if(info.mThread.isAlive()){
-//							Log.i(TAG,"Manager thread already exist");
-//							try{
-//								ByteBuffer b = ByteBuffer.allocate(4);
-//								b.putInt(length);
-//								b.position(0);
-//								//Log.i(TAG,"writing app packet on Pipe: "+ length + b.getInt());
-//								//First, write the pkt len, then the real pkt
-//								info.mPipeOutputStream.write(b.array(),0,4);
-//								info.mPipeOutputStream.flush();
-//								info.mPipeOutputStream.write(packet.array(),0,length);
-//								info.mPipeOutputStream.flush();
-//
-//							} catch (IOException e) {
-//								e.printStackTrace();
-//								mThreadMap.remove(info);
-//							}
-//							continue;
-//						}
-//						else {
-//							Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
-//							mThreadMap.remove(info);
-//						}
-//
-//					}
 
+					//					Log.i("pkt", appPacket.ip4Header.destinationAddress.getHostAddress());
+					//					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
+					//					if(!appHostAddress.equals("160") && !appHostAddress.equals("192") ){
+					//						packet.clear();
+					//						continue;
+					//					}
+
+					//Log.i(TAG, appPacket.ip4Header.destinationAddress.getHostAddress());
+
+					// Check if a thread is already manage the connection only if it's a TCP pkt, and it don't have PSH flag set
+					// if it don't have payload is just a FIN or SYN or RST pkt
+//					if(appPacket.isTCP()){
+//						if( ((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0) &&
+//								!appPacket.tcpHeader.isPSH()){
+//							key.set(appPacket);
+//							InfoThread info = mThreadMap.get(key);
+//
+//							if (info != null){ // Thread is mapped
+//								if(info.mThread.isAlive()){
+//									Log.i(TAG,"Manager thread already exist");
+//									try{
+//										ByteBuffer b = ByteBuffer.allocate(4);
+//										b.putInt(length);
+//										b.position(0);
+//										//Log.i(TAG,"writing app packet on Pipe: "+ length + b.getInt());
+//										//First, write the pkt len, then the real pkt
+//										info.mPipeOutputStream.write(b.array(),0,4);
+//										info.mPipeOutputStream.flush();
+//										info.mPipeOutputStream.write(packet.array(),0,length);
+//										info.mPipeOutputStream.flush();
+//
+//									} catch (IOException e) {
+//										e.printStackTrace();
+//										mThreadMap.remove(info);
+//									}
+//									continue;
+//								}
+//								else {
+//									Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
+//									mThreadMap.remove(info);
+//								}
+//
+//							}
+//						}
+//					}
 					// New Connection
 					//Log.i(TAG,"Creation new manager thread");
 					ThreadLog newThread = new ThreadLog(out, packet, length, this,threadNum,sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-//					PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
-//					PipedOutputStream writePipe = new PipedOutputStream(readPipe);
+//					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH()){
+//						PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
+//						PipedOutputStream writePipe = new PipedOutputStream(readPipe);
 //
-//					InfoThread infoThread=new InfoThread(logPacket, writePipe);
-//
-//					newThread.setPipe(readPipe);
-//
-//					mThreadMap.put(key, infoThread); 
+//						InfoThread infoThread=new InfoThread(logPacket, writePipe);
+//						newThread.setPipe(readPipe);
+//						mThreadMap.put(key, infoThread); 
+//					}
 
 					logPacket.start();
 

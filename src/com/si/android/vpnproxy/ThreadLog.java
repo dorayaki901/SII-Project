@@ -1,4 +1,4 @@
-package com.si.android.vpnproxy;
+package com.example.android.vpnproxy;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -6,6 +6,7 @@ import java.io.PipedInputStream;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentLinkedQueue;
+
 import android.net.VpnService;
 import android.util.Log;
 
@@ -41,20 +42,15 @@ public class ThreadLog implements Runnable {
 	@Override
 	public void run() {
 
-		//		if(pktInfo.ip4Header.destinationAddress.getHostAddress().equals("160.80.10.11")){
-		//			Log.i(TAG, "Starting new Thread for connection at:" + pktInfo.ip4Header.destinationAddress.getHostAddress() + ":" + pktInfo.tcpHeader.destinationPort);
-		//			TCPSocket();
-		//		}
-
-		//						if(pktInfo.isUDP()){
-		//							try {
-		//								UDPSocket();
-		//							} catch (IOException e) {
-		//								// TODO Auto-generated catch block
-		//								e.printStackTrace();
-		//							}
-		//							return;
-		//						}
+		if(pktInfo.isUDP()){
+				try {
+					UDPSocket();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}	
+			return;
+		}
 
 		if(pktInfo.isTCP()){
 			TCPSocket();
@@ -68,11 +64,11 @@ public class ThreadLog implements Runnable {
 	 * @throws IOException 
 	 */
 	private void UDPSocket() throws IOException {
+		
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		UDPManager UDP = new UDPManager(this.pktInfo, sentoToAppQueue, vpn);
 
 
-		//QUI MI DA NEGATIVE ARRAY SIZE
 		byte[] payload = new byte[lengthRequest-pktInfo.ip4Header.headerLength-Packet.UDP_HEADER_SIZE];
 		//			Log.i("ThreadLog", "UDP:"+ lengthRequest+"\nSIZE:"+pktInfo.ip4Header.headerLength);
 		pktInfo.backingBuffer.position(pktInfo.ip4Header.headerLength+Packet.UDP_HEADER_SIZE);
@@ -102,8 +98,10 @@ public class ThreadLog implements Runnable {
 	private void TCPSocket() {
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		byte[] payload = null;
-		TCPManager TCP = new TCPManager(this.pktInfo, this.sentoToAppQueue,this.vpn);
-
+		TCPManager TCP = new TCPManager(this.pktInfo, this.sentoToAppQueue,this.vpn,this.readPipe);
+				
+		
+		
 		try {
 
 			//			do{
@@ -165,7 +163,6 @@ public class ThreadLog implements Runnable {
 		}
 
 	}
-
 
 
 }
