@@ -1,4 +1,4 @@
-package com.example.android.vpnproxy;
+package com.si.android.vpnproxy;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Random;
@@ -42,6 +43,9 @@ public class TCPManager {
 	public boolean managePKT(byte[] payload) {
 
 		ByteBuffer totalPayload = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+		totalPayload.put(payload);
+		ByteBuffer app = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+
 		/** 1. check the type of pkt: SYN-SYN/ACK-FIN **/
 		if (pktInfo.tcpHeader.isRST()){ // Reset from peer
 			if (ssTCP!=null)
@@ -84,9 +88,13 @@ public class TCPManager {
 			//			Log.e("Fragmentation",""+check+" \n "+this.pktInfo.ip4Header.fragmentOffset);
 			/**********************************************************/
 			/****Management of fragmentation request ****/
-//			if(!pktInfo.tcpHeader.isPSH()){
-//				waitForTotalPayload();
-//			}
+			if(!pktInfo.tcpHeader.isPSH()){
+				if( (app = waitForTotalPayload()) == null){
+					return false;
+				}
+				totalPayload.put(app);
+			}
+			/**********************************************************/
 			try {
 				if(ssTCP==null){ // only the fist time. If I have already a connection, send directly the payload
 					ssTCP = openConnection();
@@ -100,9 +108,9 @@ public class TCPManager {
 				//					Log.e("Header TCP",this.pktInfo.tcpHeader.toString());
 				//					//manageACK();
 				//				}
-				
-				//TODO se il pkt non ha il flag PSH impostato vuol dire che è frammentato e devo aspetta gli altri
-				
+
+				//TODO se il pkt non ha il flag PSH impostato vuol dire che ï¿½ frammentato e devo aspetta gli altri
+
 				outToServer.write(payload,0,payload.length);
 				outToServer.flush();
 
@@ -150,6 +158,64 @@ public class TCPManager {
 		return true;
 	}
 
+	private ByteBuffer waitForTotalPayload() {
+		
+		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
+		ByteBuffer totalPacket  = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+		
+		while(true){
+			/** Read from the pipe for the APP response **/
+			int length = 0;
+			int dimP = 0;
+			int tot = 0;
+			byte[] sizeBuff = new byte[4];
+			//1. Receive the new packet dimension (4 byte length)
+			while(tot<4){
+				try {
+					length = this.readPipe.read(sizeBuff,tot,4-tot);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} // read the length of the pkt
+				if (length <0){
+					Log.i(TAG, "Error reading from pipe");
+					return null;
+				}
+				tot += length ;
+			}
+
+			tot = 0;
+			dimP = ByteBuffer.wrap(sizeBuff).getInt();
+			//receive the real pkt
+			while(dimP>tot){
+				try {
+					length = this.readPipe.read(receivedPacket,tot,dimP-tot);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}				
+				if (length <0){
+					Log.i(TAG, "Error reading from pipe");
+					return null;
+				}
+				tot += length ;
+			}		
+			
+			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
+			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
+			
+			totalPacket.put(payload);
+			try {
+				if((new Packet(ByteBuffer.wrap(receivedPacket))).tcpHeader.isPSH())
+					return(totalPacket);
+			} catch (UnknownHostException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
+	}
+
 	private void sendFIN() {
 		Log.i(TAG, "FIN request");
 		pktInfo.swapSourceAndDestination();
@@ -161,7 +227,7 @@ public class TCPManager {
 		bufferFromNetwork.flip();
 
 		sentoToAppQueue.add(bufferFromNetwork);
-		
+
 	}
 
 	/**
@@ -265,7 +331,7 @@ public class TCPManager {
 			}
 			ssTCP.connect(new InetSocketAddress(pktInfo.ip4Header.destinationAddress, pktInfo.tcpHeader.destinationPort));
 			ssTCP.setReuseAddress(true);
-			
+
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

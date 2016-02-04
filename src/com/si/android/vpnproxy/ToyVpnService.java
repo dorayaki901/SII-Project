@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.example.android.vpnproxy;
+package com.si.android.vpnproxy;
 
 import android.app.PendingIntent;
 import android.content.Intent;

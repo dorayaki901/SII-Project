@@ -1,4 +1,4 @@
-package com.example.android.vpnproxy;
+package com.si.android.vpnproxy;
 
 import java.io.IOException;
 import java.net.DatagramPacket;

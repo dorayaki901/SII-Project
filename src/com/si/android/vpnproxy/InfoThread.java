@@ -1,4 +1,4 @@
-package com.example.android.vpnproxy;
+package com.si.android.vpnproxy;
 
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
