@@ -39,12 +39,12 @@ public class TCPManager {
 	 * Main Class for manage the connection
 	 * @param payload The TCP packet payload
 	 * @return false in case of errors. the Manager Thread will be terminated -->RivedereS
+	 * @throws InterruptedException 
 	 */
-	public boolean managePKT(byte[] payload) {
-
+	public boolean managePKT(byte[] payload) throws InterruptedException {
 		ByteBuffer totalPayload = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
 		totalPayload.put(payload);
-		ByteBuffer app = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+		ByteBuffer app;
 
 		/** 1. check the type of pkt: SYN-SYN/ACK-FIN **/
 		if (pktInfo.tcpHeader.isRST()){ // Reset from peer
@@ -80,12 +80,10 @@ public class TCPManager {
 		int responseLen = 0;
 
 		//if the msg have some payload, resent it to the outside Server
-		if( payload!= null && !(new String(payload)).isEmpty() ){
+		if(!(new String(payload)).isEmpty()){
 			//manageACK();
 			//Send First Ack
-
-			//			boolean check=checkFragmentation(this.pktInfo.ip4Header);
-			//			Log.e("Fragmentation",""+check+" \n "+this.pktInfo.ip4Header.fragmentOffset);
+			
 			/**********************************************************/
 			/****Management of fragmentation request ****/
 			if(!pktInfo.tcpHeader.isPSH()){
@@ -95,35 +93,28 @@ public class TCPManager {
 				totalPayload.put(app);
 			}
 			/**********************************************************/
+			
+			
 			try {
 				if(ssTCP==null){ // only the fist time. If I have already a connection, send directly the payload
 					ssTCP = openConnection();
 					this.outToServer = new DataOutputStream(ssTCP.getOutputStream());
 					this.inFromServer  = ssTCP.getInputStream();
 				}
-				//Send request to the outside-server
-				//				synchronized (this) {
-				//					Log.i("Request",new String(payload));
-				//					Log.e("Bit Fragment IP",Integer.toString(this.pktInfo.ip4Header.identificationAndFlagsAndFragmentOffset,2));
-				//					Log.e("Header TCP",this.pktInfo.tcpHeader.toString());
-				//					//manageACK();
-				//				}
 
 				//TODO se il pkt non ha il flag PSH impostato vuol dire che ï¿½ frammentato e devo aspetta gli altri
 
-				outToServer.write(payload,0,payload.length);
-				outToServer.flush();
+				outToServer.write(payload,0,20);
+				Thread.sleep(200);
+				outToServer.write(payload,20,payload.length-20);
+				//outToServer.flush();
 
 				// Reading outside-server response
-				Log.i(TAG, "Reading outside-server response");
 				responseLen = 0;
 				long [] value={pktInfo.tcpHeader.acknowledgementNumber,0};
 				int count = 0;
 
-				String pay=new String(payload);
-
-				Log.i("Thread: "+Thread.currentThread().getId(), "Request: "+ pay);
-				Log.i("Thread: "+Thread.currentThread().getId(), pktInfo.toString());
+				//String pay=new String(payload);
 
 				while ((count = inFromServer.read(response,0,ToyVpnService.MAX_PACKET_LENGTH)) > 0) {
 					responseLen += count;
@@ -139,7 +130,6 @@ public class TCPManager {
 			}	
 
 			if(responseLen <0){//The server didn't sent anythings. The connection will be closed 
-				Log.e("ThreadLog","scrush" );
 				sendFIN();
 				return false;
 			}
@@ -159,26 +149,28 @@ public class TCPManager {
 	}
 
 	private ByteBuffer waitForTotalPayload() {
-		
-		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
+		int i=0;
+		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH],payload;
 		ByteBuffer totalPacket  = ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+		int length, tot, dimP = 0;
+		int payloadReceiveLen=0;
 		
 		while(true){
+			i++;
 			/** Read from the pipe for the APP response **/
-			int length = 0;
-			int dimP = 0;
-			int tot = 0;
+			tot = 0;
+			length = 0;
 			byte[] sizeBuff = new byte[4];
 			//1. Receive the new packet dimension (4 byte length)
 			while(tot<4){
 				try {
 					length = this.readPipe.read(sizeBuff,tot,4-tot);
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
+					Log.e(Thread.currentThread().getId()+"-"+"ERROR-4", i+"");
 					e.printStackTrace();
 				} // read the length of the pkt
 				if (length <0){
-					Log.i(TAG, "Error reading from pipe");
+					Log.e(Thread.currentThread().getId()+"-"+"ERROR-1", i+"");
 					return null;
 				}
 				tot += length ;
@@ -191,33 +183,50 @@ public class TCPManager {
 				try {
 					length = this.readPipe.read(receivedPacket,tot,dimP-tot);
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
+					Log.e(Thread.currentThread().getId()+"-"+"ERROR-3", i+"");
 					e.printStackTrace();
 				}				
 				if (length <0){
-					Log.i(TAG, "Error reading from pipe");
+					Log.e(Thread.currentThread().getId()+"-"+"ERROR-2", i+"");
 					return null;
 				}
 				tot += length ;
 			}		
 			
-			byte[] payload = new byte[pktInfo.backingBuffer.remaining()];
-			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-			
-			totalPacket.put(payload);
-			try {
-				if((new Packet(ByteBuffer.wrap(receivedPacket))).tcpHeader.isPSH())
+			try {			
+				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket,0,dimP));
+				payloadReceiveLen = dimP-pktInfo.backingBuffer.position();
+		
+				payload = new byte[payloadReceiveLen];
+				
+				pktInfo.backingBuffer.get(payload, 0, payloadReceiveLen);	
+				totalPacket.put(payload);
+				
+				Log.i(Thread.currentThread().getId()+"-"+i,new String(payload)+"\n");//new String(totalPacket.array())).substring(0,totalPacket.position()));
+				
+				
+				if(pktInfo.tcpHeader.isPSH()){
+					//Log.i("WaitForTotalPayload",(new String(totalPacket.array())).substring(0,totalPacket.position()));
 					return(totalPacket);
+				}
+				
+				
+				/**
+				 * gestione ack di risposta, vediamo se così almeno ho un riscontro e mi manda il resto del messaggio. vediamo un po
+				 */
+				manageACK();
+					
+				
 			} catch (UnknownHostException e) {
-				// TODO Auto-generated catch block
+				Log.e(Thread.currentThread().getId()+"-"+"ERROR-5", i+"");
 				e.printStackTrace();
 			}
+			
 		}
 
 	}
 
 	private void sendFIN() {
-		Log.i(TAG, "FIN request");
 		pktInfo.swapSourceAndDestination();
 		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber ;//(int) Math.random(); // Random number 
 		long ackNum = pktInfo.tcpHeader.sequenceNumber + 1; // increment the seq. num.
@@ -232,22 +241,28 @@ public class TCPManager {
 
 	/**
 	 * Send an empty ack pkt
+	 * @throws UnknownHostException 
 	 */
-	private void manageACK() {
-		// Send SYN-ACK response
-		//TODO prima era swap
-		pktInfo.updateSourceAndDestination();
-		int payloadReceiveLen = (pktInfo.backingBuffer.capacity()-pktInfo.ip4Header.headerLength-pktInfo.tcpHeader.headerLength);
-		long acknowledgmentNumber = pktInfo.tcpHeader.sequenceNumber + payloadReceiveLen;// +length;
-		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber;
-		pktInfo.updateTCPBuffer(pktInfo.backingBuffer, (byte) (Packet.TCPHeader.ACK | Packet.TCPHeader.PSH), sequenceNum, acknowledgmentNumber, 0);
+	private void manageACK() throws UnknownHostException {
+			
+		byte[] dst= new byte[ pktInfo.ip4Header.headerLength+pktInfo.tcpHeader.headerLength];
+		pktInfo.backingBuffer.position(0);
+		pktInfo.backingBuffer.get(dst, 0, pktInfo.ip4Header.headerLength+pktInfo.tcpHeader.headerLength);
 
-		ByteBuffer bufferFromNetwork = pktInfo.backingBuffer;
-		bufferFromNetwork.flip();
+		Packet appPacket= new Packet(ByteBuffer.wrap(dst));
+		
+		appPacket.updateSourceAndDestination();
+		int payloadReceiveLen = pktInfo.backingBuffer.limit()-pktInfo.backingBuffer.position();
+		long acknowledgmentNumber = pktInfo.tcpHeader.sequenceNumber + payloadReceiveLen;
+		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber;
+		
+		
+		appPacket.updateTCPBuffer(appPacket.backingBuffer, (byte) Packet.TCPHeader.ACK , sequenceNum, acknowledgmentNumber, 0);
+
+		ByteBuffer bufferFromNetwork = appPacket.backingBuffer;
+		bufferFromNetwork.position(0);
 
 		sentoToAppQueue.add(bufferFromNetwork);
-
-		pktInfo.updateSourceAndDestination();
 
 	}
 
@@ -273,7 +288,6 @@ public class TCPManager {
 	public void manageFIN() {
 		// Send SYN-ACK response
 		// Send SYN-ACK response
-		Log.i(TAG, "FIN request");
 		pktInfo.swapSourceAndDestination();
 		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber ;//(int) Math.random(); // Random number 
 		long ackNum = pktInfo.tcpHeader.sequenceNumber + 1; // increment the seq. num.
@@ -400,7 +414,6 @@ public class TCPManager {
 				sequenceNumPrec = sequenceNum;
 				payloadLenghtPrec = payloadSent;
 				payloadLength-= payloadSent;
-				Log.d("sendToApp1", "SENT TO APP:" + new String(bufferFromNetwork.array()));
 
 			} catch (Exception e) {e.printStackTrace();}
 

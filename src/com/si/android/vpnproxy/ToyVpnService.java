@@ -16,7 +16,6 @@
 
 package com.si.android.vpnproxy;
 
-import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.VpnService;
 import android.os.Handler;
@@ -37,11 +36,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class ToyVpnService extends VpnService implements Handler.Callback, Runnable {
 	private static final String TAG = "VpnService";
 
-	private String mServerAddress;
-	private int mServerPort = 1050;
 	public static final int MAX_PACKET_LENGTH = 94000;
-	private PendingIntent mConfigureIntent;
-	private HashMap<IdentifierKeyThread, InfoThread> mThreadMap;
+	private HashMap<Integer, InfoThread> mThreadMap;
 	private Thread mThread;
 	private ParcelFileDescriptor mInterface;
 	//a. Configure a builder for the interface.
@@ -52,7 +48,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		// The handler is only used to show messages.
 		mThread = new Thread(this, "ToyVpnThread");
-		mThreadMap = new HashMap<IdentifierKeyThread, InfoThread>();
+		mThreadMap = new HashMap<Integer, InfoThread>();
 		//start the service
 		mThread.start();
 
@@ -82,7 +78,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			int length = 0;
 			boolean idle;
 
-			IdentifierKeyThread key = new IdentifierKeyThread();
+			Integer key;
 			ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_LENGTH);
 			//a. Configure the TUN and get the interface.
 			ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue = new ConcurrentLinkedQueue<ByteBuffer>();
@@ -100,7 +96,6 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
 			Packet appPacket = new Packet(packet);
-			int threadNum = 0;
 			/****/
 			SendToApp writeThread = new SendToApp(out,sentoToAppQueue);
 			Thread sendToApp = new Thread(writeThread);
@@ -115,68 +110,70 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 					appPacket = new Packet(packet);
 
 
-					//					Log.i("pkt", appPacket.ip4Header.destinationAddress.getHostAddress());
-					//					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
-					//					if(!appHostAddress.equals("160") && !appHostAddress.equals("192") ){
-					//						packet.clear();
-					//						continue;
-					//					}
-
+					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
+					if(!appHostAddress.equals("160") && !appHostAddress.equals("192") ){
+						packet.clear();
+						continue;
+					}
+					
+					
+					Log.i(TAG,appPacket.tcpHeader.sourcePort+"");
+					key=(IdentifierKeyThread.hashCode(appPacket));
+					
 					//Log.i(TAG, appPacket.ip4Header.destinationAddress.getHostAddress());
 
 					// Check if a thread is already manage the connection only if it's a TCP pkt, and it don't have PSH flag set
 					// if it don't have payload is just a FIN or SYN or RST pkt
-//					if(appPacket.isTCP()){
-//						if( ((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0) &&
-//								!appPacket.tcpHeader.isPSH()){
-//							key.set(appPacket);
-//							InfoThread info = mThreadMap.get(key);
-//
-//							if (info != null){ // Thread is mapped
-//								if(info.mThread.isAlive()){
+					if(appPacket.isTCP()){
+						if(((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0) &&
+								!appPacket.tcpHeader.isPSH()){
+							
+							
+							InfoThread info = mThreadMap.get(key);
+
+							if (info != null){ // Thread is mapped
+								if(info.mThread.isAlive()){
 //									Log.i(TAG,"Manager thread already exist");
-//									try{
-//										ByteBuffer b = ByteBuffer.allocate(4);
-//										b.putInt(length);
-//										b.position(0);
-//										//Log.i(TAG,"writing app packet on Pipe: "+ length + b.getInt());
-//										//First, write the pkt len, then the real pkt
-//										info.mPipeOutputStream.write(b.array(),0,4);
-//										info.mPipeOutputStream.flush();
-//										info.mPipeOutputStream.write(packet.array(),0,length);
-//										info.mPipeOutputStream.flush();
-//
-//									} catch (IOException e) {
-//										e.printStackTrace();
-//										mThreadMap.remove(info);
-//									}
-//									continue;
-//								}
-//								else {
+									try{
+										ByteBuffer b = ByteBuffer.allocate(4);
+										b.putInt(length);
+										b.position(0);
+//										Log.i(TAG,new String(packet.array()).substring(0, length+5));
+										//First, write the pkt len, then the real pkt
+										info.mPipeOutputStream.write(b.array(),0,4);
+										info.mPipeOutputStream.flush();
+										info.mPipeOutputStream.write(packet.array(),0,length);
+										info.mPipeOutputStream.flush();
+
+									} catch (IOException e) {
+										e.printStackTrace();
+										mThreadMap.remove(info);
+									}
+									continue;
+								}
+								else {
 //									Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
-//									mThreadMap.remove(info);
-//								}
-//
-//							}
-//						}
-//					}
+									mThreadMap.remove(info);
+								}
+
+							}
+						}
+					}
 					// New Connection
 					//Log.i(TAG,"Creation new manager thread");
-					ThreadLog newThread = new ThreadLog(out, packet, length, this,threadNum,sentoToAppQueue);
+					ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-//					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH()){
-//						PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
-//						PipedOutputStream writePipe = new PipedOutputStream(readPipe);
-//
-//						InfoThread infoThread=new InfoThread(logPacket, writePipe);
-//						newThread.setPipe(readPipe);
-//						mThreadMap.put(key, infoThread); 
-//					}
+					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH()){
+						PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
+						PipedOutputStream writePipe = new PipedOutputStream(readPipe);
+
+						InfoThread infoThread=new InfoThread(logPacket, writePipe);
+						newThread.setPipe(readPipe);
+						mThreadMap.put(key, infoThread); 
+					}
 
 					logPacket.start();
-
-					threadNum++;
 
 					//idle = false;
 

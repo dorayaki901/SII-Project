@@ -20,7 +20,7 @@ public class ThreadLog implements Runnable {
 	ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue ;
 	private ByteBuffer packetBuffer;
 
-	public ThreadLog(FileOutputStream out, ByteBuffer pktFromApp, int lengthRequest, VpnService vpn,int i, ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue) throws UnknownHostException {
+	public ThreadLog(FileOutputStream out, ByteBuffer pktFromApp, int lengthRequest, VpnService vpn, ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue) throws UnknownHostException {
 		this.lengthRequest = lengthRequest;
 		this.vpn = vpn;
 		this.out = out;
@@ -65,7 +65,7 @@ public class ThreadLog implements Runnable {
 	 */
 	private void UDPSocket() throws IOException {
 		
-		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
+		//byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		UDPManager UDP = new UDPManager(this.pktInfo, sentoToAppQueue, vpn);
 
 
@@ -96,12 +96,10 @@ public class ThreadLog implements Runnable {
 	 * Send and receive messages through an TCP connection
 	 */
 	private void TCPSocket() {
-		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
+		//byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
 		byte[] payload = null;
 		TCPManager TCP = new TCPManager(this.pktInfo, this.sentoToAppQueue,this.vpn,this.readPipe);
-				
-		
-		
+						
 		try {
 
 			//			do{
@@ -111,7 +109,15 @@ public class ThreadLog implements Runnable {
 				return;
 			}
 			//Extract payload
+				
 			payload = new byte[pktInfo.backingBuffer.remaining()];
+			
+//			synchronized (this) {
+//				Log.i("3", pktInfo.backingBuffer.limit()+" - "+pktInfo.backingBuffer.position());
+//				Log.i("3", (new String(payload)).isEmpty()+"");
+//			}			
+			
+			
 			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
 
 			//Manager TCP connection and TCP pkt
