@@ -28,18 +28,15 @@ public class SendToApp implements Runnable{
 				while ((buffToApp = sentoToAppQueue.poll()) != null) {
 					//buffToApp.position(0);
 					//while(buffToApp.hasRemaining())
-						//vpnOutput.write(buffToApp);
-					
+					//vpnOutput.write(buffToApp);
+//					Log.i("STAPP", (new Packet(buffToApp)).tcpHeader.toString());
 					out.write(buffToApp.array());
 //					if(buffToApp.array().length>200){
 //					out.write(buffToApp.array(),0,2000);
 //					out.write(buffToApp.array(), 200, buffToApp.array().length - 200);
 //					}
-						
-						
 					buffToApp.position(0);
 				}
-				Thread.currentThread();
 				Thread.sleep(500);
 			} catch (Exception ex) {
 				ex.printStackTrace();

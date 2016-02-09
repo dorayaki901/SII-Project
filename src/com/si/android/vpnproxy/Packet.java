@@ -38,8 +38,8 @@ public class Packet
 	public UDPHeader udpHeader;
 	public ByteBuffer backingBuffer;
 
-	private boolean isTCP;
-	private boolean isUDP;
+	private boolean isTCP=false;
+	private boolean isUDP=false;
 
 	public Packet(ByteBuffer buffer) throws UnknownHostException {
 		this.ip4Header = new IP4Header(buffer);

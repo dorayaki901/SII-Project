@@ -90,80 +90,30 @@ public class ThreadLog implements Runnable {
 
 	}
 
-
-
 	/**
 	 * Send and receive messages through an TCP connection
 	 */
 	private void TCPSocket() {
-		//byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH];
+	
 		byte[] payload = null;
 		TCPManager TCP = new TCPManager(this.pktInfo, this.sentoToAppQueue,this.vpn,this.readPipe);
 						
 		try {
-
-			//			do{
+			
 			if(this.pktInfo == null){
 				Log.e(TAG,"error pkt null");
-				//continue;
 				return;
 			}
-			//Extract payload
-				
-			payload = new byte[pktInfo.backingBuffer.remaining()];
-			
-//			synchronized (this) {
-//				Log.i("3", pktInfo.backingBuffer.limit()+" - "+pktInfo.backingBuffer.position());
-//				Log.i("3", (new String(payload)).isEmpty()+"");
-//			}			
-			
+
+			payload = new byte[pktInfo.backingBuffer.remaining()];			
 			
 			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
 
 			//Manager TCP connection and TCP pkt
 			if(!TCP.managePKT(payload))
 				return;
-
-			//				/** Read from the pipe for the APP response **/
-			//				int length = 0;
-			//				int dimP = 0;
-			//				int tot = 0;
-			//				byte[] sizeBuff = new byte[4];
-			//				//1. Receive the new packet dimension (4 byte length)
-			//				while(tot<4){
-			//					length = readPipe.read(sizeBuff,tot,4-tot); // read the length of the pkt
-			//					if (length <0){
-			//						Log.i(TAG, "Error reading from pipe");
-			//						return;
-			//					}
-			//					tot += length ;
-			//				}
-			//
-			//				tot = 0;
-			//				dimP = ByteBuffer.wrap(sizeBuff).getInt();
-			//				//receive the real pkt
-			//				while(dimP>tot){
-			//					length = readPipe.read(receivedPacket,tot,dimP-tot);				
-			//					if (length <0){
-			//						Log.i(TAG, "Error reading from pipe");
-			//						return;
-			//					}
-			//					tot += length ;
-			//				}								
-			//
-			//				//Initializing the new pkt
-			//				ByteBuffer packetBuffer = ByteBuffer.allocate(tot);
-			//				packetBuffer.put(receivedPacket, 0, tot);
-			//				packetBuffer.flip();
-			//				pktInfo  = new Packet(packetBuffer);
-			//				//				this.pktInfo = new Packet(ByteBuffer.wrap(receivedPacket));
-			//
-			//				Log.i(TAG,pktInfo.tcpHeader.sourcePort+" - "+"Read From Pipe: " + tot + " -- " + new String(packetBuffer.array()));
-			//				TCP.pktInfo = pktInfo;
-			//				//Thread.sleep(200);
-			//
-			//			}while(true);
-
+			
+			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

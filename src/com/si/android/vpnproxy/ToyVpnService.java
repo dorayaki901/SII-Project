@@ -84,7 +84,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue = new ConcurrentLinkedQueue<ByteBuffer>();
 
 			mInterface = builder.setSession("MyVPNService")
-					//.setMtu(70000)
+//					.setMtu(70000)
 					.addAddress("10.0.0.2",32)     	
 					.addRoute("0.0.0.0",0)
 					/*.addDnsServer("8.8.8.8")*/.establish();
@@ -95,60 +95,70 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
-			Packet appPacket = new Packet(packet);
+			Packet appPacket;
+			
 			/****/
 			SendToApp writeThread = new SendToApp(out,sentoToAppQueue);
 			Thread sendToApp = new Thread(writeThread);
 			sendToApp.start();
 			/****/
+			
+			String cazzo;
+			ByteBuffer b = ByteBuffer.allocate(4);
+			
+
 			while (true) {
-				//idle = true;
-				// Read the outgoing packet from the input stream.
+
 				length = in.read(packet.array());      
-				if (length > 0) {
+				
+				if (length > 0) { 
 
 					appPacket = new Packet(packet);
-
-
-					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
-					if(!appHostAddress.equals("160") && !appHostAddress.equals("192") ){
+					
+					if(!appPacket.isTCP() && !appPacket.isUDP()){
 						packet.clear();
 						continue;
 					}
+//					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
+//					if(!appHostAddress.equals("54.") && !appHostAddress.equals("192") ){
+//						packet.clear();
+//						continue;
+//					}
+					
+					//=createString(appPacket);
 					
 					
-					Log.i(TAG,appPacket.tcpHeader.sourcePort+"");
 					key=(IdentifierKeyThread.hashCode(appPacket));
 					
-					//Log.i(TAG, appPacket.ip4Header.destinationAddress.getHostAddress());
-
-					// Check if a thread is already manage the connection only if it's a TCP pkt, and it don't have PSH flag set
-					// if it don't have payload is just a FIN or SYN or RST pkt
 					if(appPacket.isTCP()){
-						if(((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0) &&
-								!appPacket.tcpHeader.isPSH()){
+						//Se non ha payload è un ACK e quindi lo devo ignorare, solo questo
+						
+						if(((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0)){
 							
 							
 							InfoThread info = mThreadMap.get(key);
 
 							if (info != null){ // Thread is mapped
-								if(info.mThread.isAlive()){
-//									Log.i(TAG,"Manager thread already exist");
+								if(info.mThread.isAlive()){				
 									try{
-										ByteBuffer b = ByteBuffer.allocate(4);
+										
 										b.putInt(length);
 										b.position(0);
-//										Log.i(TAG,new String(packet.array()).substring(0, length+5));
+										
 										//First, write the pkt len, then the real pkt
 										info.mPipeOutputStream.write(b.array(),0,4);
 										info.mPipeOutputStream.flush();
+										
 										info.mPipeOutputStream.write(packet.array(),0,length);
 										info.mPipeOutputStream.flush();
 
 									} catch (IOException e) {
 										e.printStackTrace();
 										mThreadMap.remove(info);
+										break;
+										
 									}
+									packet.clear();
 									continue;
 								}
 								else {
@@ -158,13 +168,26 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 							}
 						}
+						
+						//Aggiunto per non creare un thread solo per gli ack da scartare
+//						if (appPacket.tcpHeader.isACK() && !appPacket.tcpHeader.isFIN()){
+//							packet.clear();
+//							continue;
+//						}
+							
+//						else {
+//							packet.clear();
+//							continue;
+//						}
 					}
+					
 					// New Connection
-					//Log.i(TAG,"Creation new manager thread");
+
 					ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH()){
+					//Aggiunta la terza condizione
+					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH() && appPacket.backingBuffer.remaining()!=0){ 
 						PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
 						PipedOutputStream writePipe = new PipedOutputStream(readPipe);
 
@@ -175,11 +198,8 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 					logPacket.start();
 
-					//idle = false;
-
-					packet.clear();
-
 				}
+				packet.clear();
 				Thread.sleep(100);
 			}
 		} catch (Exception e) {
@@ -195,6 +215,14 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 			}
 		}
+	}
+
+	private String createString(Packet appPacket) {
+		String cazzo = appPacket.ip4Header.destinationAddress.getHostAddress()+"-"+ 
+				((appPacket.isTCP()) ? 
+						(appPacket.tcpHeader.destinationPort+"-"+appPacket.tcpHeader.sourcePort) :
+						(appPacket.udpHeader.destinationPort+"-"+appPacket.udpHeader.sourcePort)) +"-"+ appPacket.isTCP();
+		return cazzo;
 	}
 
 }
