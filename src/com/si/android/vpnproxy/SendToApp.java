@@ -29,7 +29,7 @@ public class SendToApp implements Runnable{
 					//buffToApp.position(0);
 					//while(buffToApp.hasRemaining())
 					//vpnOutput.write(buffToApp);
-//					Log.i("STAPP", (new Packet(buffToApp)).tcpHeader.toString());
+//					CustomLog.i("STAPP", new String(buffToApp.array()));
 					out.write(buffToApp.array());
 //					if(buffToApp.array().length>200){
 //					out.write(buffToApp.array(),0,2000);

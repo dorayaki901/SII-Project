@@ -108,7 +108,7 @@ public class ThreadLog implements Runnable {
 			payload = new byte[pktInfo.backingBuffer.remaining()];			
 			
 			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-
+			
 			//Manager TCP connection and TCP pkt
 			if(!TCP.managePKT(payload))
 				return;

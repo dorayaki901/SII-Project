@@ -37,9 +37,11 @@ public class Packet
 	public TCPHeader tcpHeader;
 	public UDPHeader udpHeader;
 	public ByteBuffer backingBuffer;
-
+	
 	private boolean isTCP=false;
 	private boolean isUDP=false;
+	public int payloadLen ; 
+
 
 	public Packet(ByteBuffer buffer) throws UnknownHostException {
 		this.ip4Header = new IP4Header(buffer);
@@ -52,6 +54,7 @@ public class Packet
 		}
 
 		this.backingBuffer = buffer;
+		//this.payloadLen = pktTotalLen - this.backingBuffer.position();
 	}
 
 	@Override

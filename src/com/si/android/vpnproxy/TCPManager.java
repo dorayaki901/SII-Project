@@ -49,8 +49,8 @@ public class TCPManager {
 		totalPayload.put(payload);
 
 		/** 1. check the type of pkt: SYN-SYN/ACK-FIN **/
-		if (pktInfo.tcpHeader.isRST()){ // Reset from peer
-			Log.i("TCPManager", "Reset sent");
+		if (pktInfo.tcpHeader.isRST()){ // Reset by peer
+			Log.i("TCPManager", "Reset by peer");
 			if (ssTCP!=null)
 				try {
 					ssTCP.close();
@@ -85,8 +85,8 @@ public class TCPManager {
 
 		//if the msg have some payload, resent it to the outside Server
 		if(!(new String(payload)).isEmpty()){
-			Log.i("Request", pktInfo.tcpHeader.sourcePort+" - "+(new String(payload)));
-			Log.i("Request", pktInfo.tcpHeader.sourcePort+" - "+(new String(pktInfo.backingBuffer.array())));
+//			Log.i("Request", pktInfo.tcpHeader.sourcePort+" - "+(new String(payload)));
+//			Log.i("Request", pktInfo.tcpHeader.sourcePort+" - "+(new String(pktInfo.backingBuffer.array())));
 
 			/**********************************************************/
 			/****Management of fragmentation request ****/
@@ -109,6 +109,7 @@ public class TCPManager {
 
 				outToServer.write(totalPayload.array(),0,totalPayload.limit());
 				outToServer.flush();
+				//CustomLog.i("Request1 WRITE- "+totalPayload.limit(), (new String(totalPayload.array())).substring(0,totalPayload.limit()));
 
 				// Reading outside-server response
 				responseLen = 0;
@@ -118,9 +119,9 @@ public class TCPManager {
 				int count = 0;
 
 				//String pay=new String(payload);
-				ByteBuffer wait=ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+//				ByteBuffer wait=ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
 				while ((count = inFromServer.read(response,0,ToyVpnService.MAX_PACKET_LENGTH)) > 0) {
-					wait.put(response, 0, count);
+//					wait.put(response, 0, count);
 					responseLen += count;
 					value = sendToApp(response, count, value);
 				}
@@ -140,7 +141,7 @@ public class TCPManager {
 
 			try {
 				ssTCP.close();
-				//sendFIN();
+				sendFIN();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -150,9 +151,11 @@ public class TCPManager {
 	}
 
 	private ByteBuffer waitForTotalPayload(ByteBuffer totalPayload) {
+		
 		int i=0;
 		ArrayList<Long> sequenceNumberList=new ArrayList<Long>();
 		sequenceNumberList.add(pktInfo.tcpHeader.sequenceNumber);
+		
 		byte[] receivedPacket = new byte[ToyVpnService.MAX_PACKET_LENGTH],
 				payload;
 
@@ -160,8 +163,10 @@ public class TCPManager {
 		tot, 
 		dimP = 0;
 		int payloadReceiveLen=0;
-
+		
 		while(true){
+			CustomLog.i("ID-"+Thread.currentThread().getId(), new String(totalPayload.array()));
+
 			/** Read from the pipe for the APP response **/
 			tot = 0;
 			length = 0;
@@ -193,6 +198,7 @@ public class TCPManager {
 
 				tot += length ;
 			}		
+			CustomLog.i("ID Payload Pipe-"+Thread.currentThread().getId(), new String(receivedPacket));
 
 			try {			
 
@@ -204,9 +210,8 @@ public class TCPManager {
 					if (sequenceNumberList.get(i)==pktInfo.tcpHeader.sequenceNumber)
 						present=true;
 				
-				payloadReceiveLen = dimP-pktInfo.backingBuffer.position();
-				
-				manageACK(payloadReceiveLen);
+				payloadReceiveLen = pktInfo.backingBuffer.remaining();
+
 				
 				if(!present){
 					payload = new byte[payloadReceiveLen];
@@ -221,14 +226,13 @@ public class TCPManager {
 					
 					
 				}
-
-
+				
 				if(pktInfo.tcpHeader.isPSH()){
-					CustomLog.i("ID-"+Thread.currentThread().getId(), new String(totalPayload.array()));
+					CustomLog.i("ID-PSH"+Thread.currentThread().getId(), new String(totalPayload.array()));
 					return(totalPayload);
 				}
 					
-
+				manageACK(payloadReceiveLen);
 
 			} catch (UnknownHostException e) {
 				e.printStackTrace();
@@ -238,7 +242,7 @@ public class TCPManager {
 
 	}
 
-	//Probabilmente è sbagliato il modo di fare l update dei parametri
+	//Probabilmente ï¿½ sbagliato il modo di fare l update dei parametri
 	private void sendFIN() {
 		pktInfo.swapSourceAndDestination();
 //		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber ;//(int) Math.random(); // Random number 
@@ -371,7 +375,7 @@ public class TCPManager {
 				pktInfo.backingBuffer.position(0);
 
 				ByteBuffer newBuffer = ByteBuffer.allocateDirect(lengthPacket);
-				Packet sendToAppPkt = new Packet(pktInfo.backingBuffer);// così ha lo stesso header
+				Packet sendToAppPkt = new Packet(pktInfo.backingBuffer);// cosï¿½ ha lo stesso header
 				pktInfo.backingBuffer.position(0);
 				sendToAppPkt.backingBuffer = null; //campi riempiti ma nne 
 

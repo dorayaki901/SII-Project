@@ -33,7 +33,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-public class ToyVpnService extends VpnService implements Handler.Callback, Runnable {
+public class CopyOfToyVpnService extends VpnService implements Handler.Callback, Runnable {
 	private static final String TAG = "VpnService";
 
 	public static final int MAX_PACKET_LENGTH = 94000;
@@ -84,7 +84,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			ConcurrentLinkedQueue<ByteBuffer> sentoToAppQueue = new ConcurrentLinkedQueue<ByteBuffer>();
 
 			mInterface = builder.setSession("MyVPNService")
-					//					.setMtu(70000)
+//					.setMtu(70000)
 					.addAddress("10.0.0.2",32)     	
 					.addRoute("0.0.0.0",0)
 					/*.addDnsServer("8.8.8.8")*/.establish();
@@ -96,100 +96,110 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 			FileOutputStream out = new FileOutputStream(
 					mInterface.getFileDescriptor());
 			Packet appPacket;
-
+			
 			/****/
 			SendToApp writeThread = new SendToApp(out,sentoToAppQueue);
 			Thread sendToApp = new Thread(writeThread);
 			sendToApp.start();
 			/****/
-
+			
 			ByteBuffer b = ByteBuffer.allocate(4);
-
+			
 
 			while (true) {
 
 				length = in.read(packet.array());      
-
+				
 				if (length > 0) { 
 
 					appPacket = new Packet(packet);
-
+					
 					if(!appPacket.isTCP() && !appPacket.isUDP()){
 						packet.clear();
 						continue;
 					}
-					
-					/***************************************/
-//					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
-//					if(!appHostAddress.equals("54.") && !appHostAddress.equals("192") ){
-//						packet.clear();
-//						continue;
-//					}
-					/***********************************/	
-
-					if(!appPacket.isTCP()){ // E' UDP
-						ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);
-						Thread logPacket = new Thread(newThread);
-						logPacket.start();
+					String appHostAddress=appPacket.ip4Header.destinationAddress.getHostAddress().substring(0, 3);
+					if(!appHostAddress.equals("54.") && !appHostAddress.equals("192") ){
 						packet.clear();
 						continue;
 					}
+					
+					//=createString(appPacket);
+					
+					
+					key=(IdentifierKeyThread.hashCode(appPacket));
+					
+					if(appPacket.isTCP()){
+						//Se non ha payload � un ACK e quindi lo devo ignorare, solo questo
+						
+						//stampa momentanea...my lady tièèèèè vaffa
+						
+						int appPosition=appPacket.backingBuffer.position();		
+						byte[] appPayload=new byte[length-appPosition];
+						appPacket.backingBuffer.get(appPayload,0,length-appPosition);
+						appPacket.backingBuffer.position(appPosition);
+						
+						CustomLog.i("Request1", "PRE:" + new String(appPacket.backingBuffer.array()) );
 
-					// IF TCP PKT
-					if((length - appPacket.backingBuffer.position())==0){
-						//Pure ACK is dropped
-						if (!(appPacket.tcpHeader.isACK() && !appPacket.tcpHeader.isFIN() &&  !appPacket.tcpHeader.isRST()) ){
-							ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);
-							Thread logPacket = new Thread(newThread);
-							logPacket.start();
-						}
-							packet.clear();
-							continue;
+						//if(((appPacket.backingBuffer.limit() - appPacket.backingBuffer.position())!=0)){
+						if(((length - appPacket.backingBuffer.position())!=0)){
+							CustomLog.i("Request1", "POST:" + new String(appPacket.backingBuffer.array()) );
 
-					}
-					else{
-						//Check if a manager thread already exist
-						key = (IdentifierKeyThread.hashCode(appPacket));
-						InfoThread info = mThreadMap.get(key);
+							String appString = (new String(appPayload));
+						CustomLog.i("Request1", "" + (length - appPacket.backingBuffer.position()-appPacket.payloadLen) );
+							
+							InfoThread info = mThreadMap.get(key);
 
-						if (info != null){ // Thread is mapped
-							if(info.mThread.isAlive()){				
-								try{
+							if (info != null){ // Thread is mapped
+								if(info.mThread.isAlive()){				
+									try{
+										
+										b.putInt(length);
+										b.position(0);
+										
+										//First, write the pkt len, then the real pkt
+										info.mPipeOutputStream.write(b.array(),0,4);
+										info.mPipeOutputStream.flush();
+										
+										info.mPipeOutputStream.write(packet.array(),0,length);
+										info.mPipeOutputStream.flush();
 
-									b.putInt(length);
-									b.position(0);
-
-									//First, write the pkt len, then the real pkt
-									info.mPipeOutputStream.write(b.array(),0,4);
-									info.mPipeOutputStream.flush();
-
-									info.mPipeOutputStream.write(packet.array(),0,length);
-									info.mPipeOutputStream.flush();
-
-								} catch (IOException e) {
-									e.printStackTrace();
-									mThreadMap.remove(info);
-									break;
-
+									} catch (IOException e) {
+										e.printStackTrace();
+										mThreadMap.remove(info);
+										break;
+										
+									}
+									packet.clear();
+									continue;
 								}
-								packet.clear();
-								continue;
-							}
-							else {
-								//									Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
-								mThreadMap.remove(info);
-							}
+								else {
+//									Log.i(TAG,"Thread is dead--TID:" + mThread.getId());
+									mThreadMap.remove(info);
+								}
 
+							}
 						}
+						
+						//Aggiunto per non creare un thread solo per gli ack da scartare
+//						if (appPacket.tcpHeader.isACK() && !appPacket.tcpHeader.isFIN() &&  !appPacket.tcpHeader.isPSH() ){
+//							packet.clear();
+//							continue;
+//						}
+							
+//						else {
+//							packet.clear();
+//							continue;
+//						}
 					}
-
+					
 					// New Connection
 
 					ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);
 					Thread logPacket = new Thread(newThread);
 
-					//If Pkt is not fragmented
-					if(!appPacket.tcpHeader.isPSH() && appPacket.tcpHeader.isACK()){ 
+					//Aggiunta la terza condizione
+					if(appPacket.isTCP() && !appPacket.tcpHeader.isPSH() && appPacket.backingBuffer.remaining()!=0){ 
 						PipedInputStream readPipe = new PipedInputStream(MAX_PACKET_LENGTH);
 						PipedOutputStream writePipe = new PipedOutputStream(readPipe);
 
