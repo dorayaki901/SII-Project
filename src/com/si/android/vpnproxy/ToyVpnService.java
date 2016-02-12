@@ -112,7 +112,7 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 
 				if (length > 0) { 
 
-					appPacket = new Packet(packet);
+					appPacket = new Packet(packet,length);
 
 					if(!appPacket.isTCP() && !appPacket.isUDP()){
 						packet.clear();
@@ -135,8 +135,8 @@ public class ToyVpnService extends VpnService implements Handler.Callback, Runna
 						continue;
 					}
 
-					// IF TCP PKT
-					if((length - appPacket.backingBuffer.position())==0){
+					// IF IT ARRIVE HERE IS TCP PKT
+					if((appPacket.payloadLen)<=0){
 						//Pure ACK is dropped
 						if (!(appPacket.tcpHeader.isACK() && !appPacket.tcpHeader.isFIN() &&  !appPacket.tcpHeader.isRST()) ){
 							ThreadLog newThread = new ThreadLog(out, packet, length, this, sentoToAppQueue);

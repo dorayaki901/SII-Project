@@ -112,7 +112,7 @@ public class CopyOfToyVpnService extends VpnService implements Handler.Callback,
 				
 				if (length > 0) { 
 
-					appPacket = new Packet(packet);
+					appPacket = new Packet(packet,length);
 					
 					if(!appPacket.isTCP() && !appPacket.isUDP()){
 						packet.clear();

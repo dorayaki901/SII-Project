@@ -43,7 +43,7 @@ public class Packet
 	public int payloadLen ; 
 
 
-	public Packet(ByteBuffer buffer) throws UnknownHostException {
+	public Packet(ByteBuffer buffer, int totalLen) throws UnknownHostException {
 		this.ip4Header = new IP4Header(buffer);
 		if (this.ip4Header.protocol == IP4Header.TransportProtocol.TCP) {
 			this.tcpHeader = new TCPHeader(buffer);
@@ -54,7 +54,7 @@ public class Packet
 		}
 
 		this.backingBuffer = buffer;
-		//this.payloadLen = pktTotalLen - this.backingBuffer.position();
+		this.payloadLen = totalLen - this.backingBuffer.position();
 	}
 
 	@Override

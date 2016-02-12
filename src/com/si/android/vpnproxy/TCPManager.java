@@ -105,14 +105,17 @@ public class TCPManager {
 					this.inFromServer  = ssTCP.getInputStream();
 				}
 
-				//TODO se il pkt non ha il flag PSH impostato vuol dire che � frammentato e devo aspetta gli altri
-
-				outToServer.write(totalPayload.array(),0,totalPayload.limit());
+				// Send the request to the outside Server
+				outToServer.write(totalPayload.array(),0,totalPayload.limit()); // limit is ok because i limit the buffer in waitForTotalPayload()
 				outToServer.flush();
 				//CustomLog.i("Request1 WRITE- "+totalPayload.limit(), (new String(totalPayload.array())).substring(0,totalPayload.limit()));
 
 				// Reading outside-server response
 				responseLen = 0;
+				
+				/** Comment: We have notice that for big payload, the outside server take a lot of time for sending all the responce.
+				*   For avoid an expired timeout by the APP, we fragment the response following the rules of the TCP protocol 
+				**/
 				
 				//aggiunto terzo elemento del vettore
 				long [] value={pktInfo.tcpHeader.acknowledgementNumber,0, pktInfo.tcpHeader.sequenceNumber +  pktInfo.backingBuffer.remaining()};
@@ -120,6 +123,7 @@ public class TCPManager {
 
 				//String pay=new String(payload);
 //				ByteBuffer wait=ByteBuffer.allocateDirect(ToyVpnService.MAX_PACKET_LENGTH);
+				
 				while ((count = inFromServer.read(response,0,ToyVpnService.MAX_PACKET_LENGTH)) > 0) {
 //					wait.put(response, 0, count);
 					responseLen += count;
@@ -141,7 +145,7 @@ public class TCPManager {
 
 			try {
 				ssTCP.close();
-				sendFIN();
+				//sendFIN();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -151,7 +155,7 @@ public class TCPManager {
 	}
 
 	private ByteBuffer waitForTotalPayload(ByteBuffer totalPayload) {
-		
+		int totalPayloadLen = pktInfo.payloadLen;
 		int i=0;
 		ArrayList<Long> sequenceNumberList=new ArrayList<Long>();
 		sequenceNumberList.add(pktInfo.tcpHeader.sequenceNumber);
@@ -165,7 +169,7 @@ public class TCPManager {
 		int payloadReceiveLen=0;
 		
 		while(true){
-			CustomLog.i("ID-"+Thread.currentThread().getId(), new String(totalPayload.array()));
+			//CustomLog.i("ID-"+Thread.currentThread().getId(), new String(totalPayload.array()));
 
 			/** Read from the pipe for the APP response **/
 			tot = 0;
@@ -198,37 +202,33 @@ public class TCPManager {
 
 				tot += length ;
 			}		
-			CustomLog.i("ID Payload Pipe-"+Thread.currentThread().getId(), new String(receivedPacket));
+			//CustomLog.i("ID Payload Pipe-"+Thread.currentThread().getId(), new String(receivedPacket));
 
 			try {			
 
 				
-				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket,0,dimP));
+				pktInfo = new Packet(ByteBuffer.wrap(receivedPacket,0,dimP),dimP);
 				
 				boolean present=false;
 				for(i=0;i<sequenceNumberList.size();i++)
 					if (sequenceNumberList.get(i)==pktInfo.tcpHeader.sequenceNumber)
 						present=true;
 				
-				payloadReceiveLen = pktInfo.backingBuffer.remaining();
-
+				payloadReceiveLen = pktInfo.payloadLen;
 				
 				if(!present){
-					payload = new byte[payloadReceiveLen];
-					
+					payload = new byte[payloadReceiveLen];		
 					int appPosition=pktInfo.backingBuffer.position();
-					
 					pktInfo.backingBuffer.get(payload, 0, payloadReceiveLen);	
-					
 					pktInfo.backingBuffer.position(appPosition);
-					
 					totalPayload.put(payload);	
 					
-					
+					totalPayloadLen += payloadReceiveLen;
 				}
 				
 				if(pktInfo.tcpHeader.isPSH()){
-					CustomLog.i("ID-PSH"+Thread.currentThread().getId(), new String(totalPayload.array()));
+					//CustomLog.i("ID-PSH"+Thread.currentThread().getId(), new String(totalPayload.array()));
+					totalPayload.limit(totalPayloadLen);
 					return(totalPayload);
 				}
 					
@@ -244,6 +244,7 @@ public class TCPManager {
 
 	//Probabilmente � sbagliato il modo di fare l update dei parametri
 	private void sendFIN() {
+		Log.i(TAG,"Sending FIN");
 		pktInfo.swapSourceAndDestination();
 //		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber ;//(int) Math.random(); // Random number 
 //		long ackNum = pktInfo.tcpHeader.sequenceNumber + 1; // increment the seq. num.
@@ -271,7 +272,7 @@ public class TCPManager {
 
 		appPacket.updateTCPBuffer(appPacket.backingBuffer, (byte) Packet.TCPHeader.ACK , sequenceNum, acknowledgmentNumber, 0);
 
-		ByteBuffer bufferFromNetwork = appPacket.backingBuffer;
+		ByteBuffer bufferFromNetwork = appPacket.backingBuffer.duplicate();
 		bufferFromNetwork.position(0);
 
 		sentoToAppQueue.add(bufferFromNetwork);
@@ -288,7 +289,7 @@ public class TCPManager {
 		long ackNum = pktInfo.tcpHeader.sequenceNumber + 1; // increment the seq. num.
 		pktInfo.updateTCPBuffer(pktInfo.backingBuffer, (byte) (Packet.TCPHeader.SYN | Packet.TCPHeader.ACK), sequenceNum, ackNum, 0);
 
-		ByteBuffer bufferFromNetwork = pktInfo.backingBuffer;
+		ByteBuffer bufferFromNetwork = pktInfo.backingBuffer.duplicate();
 		bufferFromNetwork.flip();
 
 		sentoToAppQueue.add(bufferFromNetwork);
@@ -300,14 +301,17 @@ public class TCPManager {
 	 */
 	public void manageFIN() {
 		// Send SYN-ACK response
+		Log.i(TAG,"Receive FIN");
 
 		pktInfo.swapSourceAndDestination();
 
 		long sequenceNum = pktInfo.tcpHeader.acknowledgementNumber ;//(int) Math.random(); // Random number 
+		//long sequenceNum = pktInfo.tcpHeader.sequenceNumber ;//(int) Math.random(); // Random number 
+
 		long ackNum = pktInfo.tcpHeader.sequenceNumber + 1; // increment the seq. num.
 		pktInfo.updateTCPBuffer(pktInfo.backingBuffer,(byte) (Packet.TCPHeader.FIN | Packet.TCPHeader.ACK), sequenceNum, ackNum, 0);
 
-		ByteBuffer bufferFromNetwork = pktInfo.backingBuffer;
+		ByteBuffer bufferFromNetwork = pktInfo.backingBuffer.duplicate();
 		bufferFromNetwork.flip();
 
 		sentoToAppQueue.add(bufferFromNetwork);
@@ -375,7 +379,7 @@ public class TCPManager {
 				pktInfo.backingBuffer.position(0);
 
 				ByteBuffer newBuffer = ByteBuffer.allocateDirect(lengthPacket);
-				Packet sendToAppPkt = new Packet(pktInfo.backingBuffer);// cos� ha lo stesso header
+				Packet sendToAppPkt = new Packet(pktInfo.backingBuffer,lengthPacket);// cos� ha lo stesso header
 				pktInfo.backingBuffer.position(0);
 				sendToAppPkt.backingBuffer = null; //campi riempiti ma nne 
 

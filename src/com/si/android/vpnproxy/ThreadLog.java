@@ -29,7 +29,7 @@ public class ThreadLog implements Runnable {
 		this.packetBuffer = ByteBuffer.allocate(lengthRequest);
 		this.packetBuffer.put( pktFromApp.array(), 0, lengthRequest);
 		this.packetBuffer.position(0);
-		this.pktInfo = new Packet(packetBuffer);
+		this.pktInfo = new Packet(packetBuffer,lengthRequest);
 	}
 
 	public void setPipe(PipedInputStream readPipe) {
@@ -105,10 +105,9 @@ public class ThreadLog implements Runnable {
 				return;
 			}
 
-			payload = new byte[pktInfo.backingBuffer.remaining()];			
-			
-			pktInfo.backingBuffer.get(payload, 0, pktInfo.backingBuffer.remaining());
-			
+			payload = new byte[pktInfo.payloadLen];			
+
+			pktInfo.backingBuffer.get(payload, 0, pktInfo.payloadLen);
 			//Manager TCP connection and TCP pkt
 			if(!TCP.managePKT(payload))
 				return;
